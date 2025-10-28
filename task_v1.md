@@ -99,13 +99,13 @@
 - [x] Update Zustand store to single-track structure
 
 ### PR 8: timeline/dom-virtualized
-- [ ] Implement horizontal scroll container with react-window
-- [ ] Position TrackItems by trackPosition
-- [ ] Implement multiplier-based zoom slider (0.5×–10×)
-- [ ] Display live label ("Zoom x 1.0")
-- [ ] Map multiplier → px/sec internally (1× ≈ 50 px/sec)
-- [ ] Clamp min/max and keep center aligned
-- [ ] Test ≥55fps smooth rendering
+- [x] Implement horizontal scroll container (without react-window for MVP)
+- [x] Position TrackItems by trackPosition
+- [x] Implement multiplier-based zoom slider (0.5×–10×)
+- [x] Display live label ("Zoom x 1.0")
+- [x] Map multiplier → px/sec internally (1× = 50 px/sec)
+- [x] Clamp min/max and keep center aligned
+- [ ] Test ≥55fps smooth rendering (performance test)
 
 ---
 
