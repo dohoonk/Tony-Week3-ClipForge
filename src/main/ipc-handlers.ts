@@ -1,5 +1,6 @@
 import { ipcMain, dialog } from 'electron'
 import { ffmpegWrapper } from './ffmpeg-wrapper'
+import { projectIO } from './project-io'
 
 // Type definitions for IPC handlers
 type Clip = {
@@ -108,25 +109,30 @@ export function setupIpcHandlers() {
     console.log('[IPC] Export completed:', data.outputPath)
   })
 
-  // saveProject - Save project JSON to disk (placeholder for PR 5)
-  ipcMain.handle('saveProject', async (_event, project: Project, path?: string) => {
-    // Input validation
-    if (!project || typeof project !== 'object') {
-      throw new Error('Invalid project: must be a valid project object')
-    }
-
-    console.log(`[IPC] saveProject called${path ? ` at: ${path}` : ''}`)
+  // saveProject - Save project JSON to disk
+  ipcMain.handle('saveProject', async (_event, project: Project, filePath?: string) => {
+    console.log('[IPC] saveProject called')
     
-    // Will be implemented in PR 5 with file I/O
-    return path || '~/.clipforge/projects/default.json'
+    try {
+      const savedPath = await projectIO.saveProject(project, filePath)
+      return savedPath
+    } catch (error: any) {
+      console.error('[IPC] Save failed:', error)
+      throw error
+    }
   })
 
-  // openProject - Load project JSON from disk (placeholder for PR 5)
+  // openProject - Load project JSON from disk
   ipcMain.handle('openProject', async () => {
     console.log('[IPC] openProject called')
     
-    // Will be implemented in PR 5 with file I/O
-    return null
+    try {
+      const project = await projectIO.openProject()
+      return project
+    } catch (error: any) {
+      console.error('[IPC] Open failed:', error)
+      throw error
+    }
   })
 
   // startRecording - Begin screen/webcam recording (placeholder for PR 11)

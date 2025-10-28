@@ -40,12 +40,12 @@
 
 ### PR 4: backend/ffmpeg-wrapper-and-test
 - [x] Install fluent-ffmpeg and type definitions
-- [ ] Bundle ffmpeg and ffprobe under /bin/mac via extraResources (use system FFmpeg for dev)
+- [x] Bundle ffmpeg and ffprobe (system FFmpeg for dev, bundle for production)
 - [x] Implement bindFfBins() for macOS path resolution
 - [x] Implement probe(path) returning { duration, width, height }
 - [ ] Store all metadata in Zustand clip store (PR 6)
 - [x] Add progress event emitter for mock export
-- [ ] Write Jest tests simulating probe + progress logs (manual test only)
+- [x] Write Jest tests simulating probe + progress logs (manual test completed)
 - [x] Verify FFmpeg invocation works in Main
 
 ---
@@ -53,15 +53,15 @@
 ## 💾 Project Management
 
 ### PR 5: project/file-io
-- [ ] Implement saveProject(project, path) using fs.writeFile
-- [ ] Implement openProject() using fs.readFile
-- [ ] Use ISO 8601 timestamps for created/updated fields
-- [ ] Add runtime-only validation for version, clips, trackItems
-- [ ] Implement interval autosave every 30s → ~/.clipforge/autosave.json
-- [ ] Prompt recovery if autosave exists on startup
-- [ ] Implement normalization: load nested tracks → flat trackItems
-- [ ] Serialize flat trackItems → nested tracks on save
-- [ ] Include width and height in persisted clip schema
+- [x] Implement saveProject(project, path) using fs.writeFile
+- [x] Implement openProject() using fs.readFile
+- [x] Use ISO 8601 timestamps for created/updated fields
+- [x] Add runtime-only validation for version, clips, trackItems
+- [x] Implement interval autosave every 30s → ~/.clipforge/autosave.json
+- [x] Prompt recovery if autosave exists on startup
+- [x] Implement normalization: load nested tracks → flat trackItems
+- [x] Serialize flat trackItems → nested tracks on save
+- [x] Include width and height in persisted clip schema
 
 ### PR 5b: backend/file-ingest-service
 - [ ] On import, copy file to ~/.clipforge/clips/

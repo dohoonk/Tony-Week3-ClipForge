@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
+import { projectIO } from './project-io'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -23,13 +24,24 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Setup autosave when content is ready
+  mainWindow.webContents.once('did-finish-load', () => {
+    console.log('[Main] Window ready, autosave will start when project loaded')
+  })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Setup IPC handlers before creating window
   setupIpcHandlers()
 
   createWindow()
+
+  // Check for autosave recovery after window is created
+  const autosaveProject = await projectIO.checkAutosave()
+  if (autosaveProject && mainWindow) {
+    mainWindow.webContents.send('project:autosave-recovery', autosaveProject)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
