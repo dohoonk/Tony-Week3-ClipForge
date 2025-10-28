@@ -11,6 +11,9 @@ export function Player() {
   const [loopEnabled, setLoopEnabled] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingType, setRecordingType] = useState<'screen' | 'webcam'>('screen')
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null)
+  const [isStartingRecording, setIsStartingRecording] = useState(false)
 
   // Get the currently playing clip path and duration
   const getCurrentVideoInfo = () => {
@@ -137,7 +140,10 @@ export function Player() {
       }
       
       processedPaths.add(path)
+      
+      // Set recording state to false since completion event means recording is done
       setIsRecording(false)
+      console.log('[Player] Recording completed, UI state updated')
       
       try {
         // Double-check in store to prevent duplicates
@@ -208,26 +214,112 @@ export function Player() {
   }
 
   const handleStartRecording = async () => {
+    // Prevent multiple countdowns
+    if (countdown !== null || countdownInterval !== null) {
+      console.log('[Player] Countdown already in progress, ignoring')
+      return
+    }
+
+    // Check if recording is already in progress BEFORE starting countdown
     try {
+      const isCurrentlyRecording = await window.clipforge.isRecording()
+      if (isCurrentlyRecording) {
+        console.log('[Player] Recording already in progress, stopping first')
+        await window.clipforge.stopRecording()
+        setIsRecording(false)
+        // Wait a moment for cleanup
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    } catch (error) {
+      console.warn('[Player] Could not check recording status:', error)
+      // Continue anyway - the actual recording will handle the error
+    }
+
+    // Start 3-second countdown
+    setCountdown(3)
+    
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval)
+          setCountdownInterval(null)
+          setCountdown(null)
+          // Start actual recording after countdown
+          startActualRecording()
+          return null
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
+    setCountdownInterval(interval)
+  }
+
+  const startActualRecording = async () => {
+    // Prevent double execution (React Strict Mode)
+    if (isStartingRecording) {
+      console.log('[Player] Recording start already in progress, skipping')
+      return
+    }
+
+    try {
+      setIsStartingRecording(true)
+      
+      // Double-check recording status before starting
+      const isCurrentlyRecording = await window.clipforge.isRecording()
+      if (isCurrentlyRecording) {
+        console.log('[Player] Recording still active, skipping start')
+        return
+      }
+
       setIsRecording(true)
       await window.clipforge.startRecording(recordingType)
       console.log('[Player] Recording started:', recordingType)
     } catch (error) {
       console.error('[Player] Failed to start recording:', error)
-      setIsRecording(false)
+      
+      // If recording is already in progress, don't reset the UI state
+      if (error instanceof Error && error.message.includes('Recording already in progress')) {
+        console.log('[Player] Recording already in progress, keeping UI state')
+        // Don't set setIsRecording(false) - the recording is actually running
+      } else {
+        setIsRecording(false)
+      }
+      
+      // Reset countdown if recording fails
+      setCountdown(null)
+    } finally {
+      setIsStartingRecording(false)
     }
   }
 
   const handleStopRecording = async () => {
     try {
       await window.clipforge.stopRecording()
-      console.log('[Player] Recording stopped')
-      setIsRecording(false)
+      console.log('[Player] Recording stopped - waiting for completion event to update UI')
+      // Don't set setIsRecording(false) here - let handleRecordingComplete handle it
     } catch (error) {
       console.error('[Player] Failed to stop recording:', error)
-      setIsRecording(false)
+      setIsRecording(false) // Only set false on error
     }
   }
+
+  const handleCancelCountdown = () => {
+    if (countdownInterval) {
+      clearInterval(countdownInterval)
+      setCountdownInterval(null)
+    }
+    setCountdown(null)
+  }
+
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval)
+      }
+    }
+  }, [countdownInterval])
 
   // Sync playhead with video timeupdate (throttled to ~30fps)
   useEffect(() => {
@@ -347,13 +439,25 @@ export function Player() {
             value={recordingType}
             onChange={(e) => setRecordingType(e.target.value as 'screen' | 'webcam')}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-            disabled={isRecording}
+            disabled={isRecording || countdown !== null}
           >
             <option value="screen">Screen</option>
             <option value="webcam">Webcam</option>
           </select>
           
-          {!isRecording ? (
+          {countdown !== null ? (
+            <div className="flex items-center gap-2">
+              <div className="px-6 py-2 bg-orange-600 rounded text-white font-medium text-center min-w-[120px]">
+                🔴 Recording in {countdown}s
+              </div>
+              <button
+                onClick={handleCancelCountdown}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : !isRecording ? (
             <button
               onClick={handleStartRecording}
               className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded text-white font-medium"

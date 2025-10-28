@@ -10,7 +10,7 @@ type RecordingOptions = {
 }
 
 export class RecordingService extends EventEmitter {
-  private isRecording = false
+  public isRecording = false
   private recordingType: 'screen' | 'webcam' | null = null
   private timeoutId: NodeJS.Timeout | null = null
   private readonly MAX_RECORDING_DURATION = 30 * 60 * 1000 // 30 minutes
@@ -253,9 +253,6 @@ export class RecordingService extends EventEmitter {
       // Wait a bit more to ensure file is written to disk
       await new Promise(resolve => setTimeout(resolve, 1000))
 
-      this.isRecording = false
-      this.recordingType = null
-
       const outputPath = this.currentOutputPath || join(this.RECORDINGS_DIR, `recording_${Date.now()}.webm`)
       this.currentOutputPath = null
 
@@ -301,6 +298,10 @@ export class RecordingService extends EventEmitter {
         path: outputPath,
         metadata
       })
+
+      // Set recording state to false AFTER emitting the event
+      this.isRecording = false
+      this.recordingType = null
 
       return {
         path: outputPath,

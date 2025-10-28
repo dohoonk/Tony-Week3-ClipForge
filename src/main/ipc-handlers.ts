@@ -212,6 +212,18 @@ export function setupIpcHandlers() {
     }
   })
 
+  // isRecording - Check if recording is currently active
+  ipcMain.handle('isRecording', async (event) => {
+    console.log('[IPC] isRecording called')
+    
+    try {
+      return recordingService.isRecording
+    } catch (error: any) {
+      console.error('[IPC] Check recording status failed:', error)
+      throw error
+    }
+  })
+
   // saveRecording - Save recording data from renderer
   ipcMain.handle('saveRecording', async (event, uint8Array: Uint8Array, outputPath: string) => {
     console.log('[IPC] saveRecording called:', outputPath)

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('clipforge', {
   startRecording: (options: any) => 
     ipcRenderer.invoke('startRecording', options),
   stopRecording: () => ipcRenderer.invoke('stopRecording'),
+  isRecording: () => ipcRenderer.invoke('isRecording'),
   saveRecording: (uint8Array: Uint8Array, outputPath: string) => 
     ipcRenderer.invoke('saveRecording', uint8Array, outputPath),
   

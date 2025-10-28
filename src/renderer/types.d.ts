@@ -16,6 +16,7 @@ interface Window {
     // Recording operations
     startRecording: (options: { type: 'screen' | 'webcam' }) => Promise<{ success: boolean }>
     stopRecording: () => Promise<{ success: boolean }>
+    isRecording: () => Promise<boolean>
     saveRecording: (uint8Array: Uint8Array, outputPath: string) => Promise<{ success: boolean; path: string }>
     
     // Event listeners
