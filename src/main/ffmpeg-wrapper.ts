@@ -91,27 +91,125 @@ export class FFmpegWrapper extends EventEmitter {
   }
 
   /**
-   * Mock export with progress events (placeholder for PR 12)
-   * @param project Project data
+   * Export timeline with filter_complex for trimmed concatenation
+   * @param project Project data with clips and trackItems (flat or nested)
    * @param outputPath Output file path
    */
   async exportTimeline(project: any, outputPath: string): Promise<void> {
-    // This is a mock implementation for PR 4
-    // Real export will be implemented in PR 12
-    
-    return new Promise((resolve) => {
-      let progress = 0
+    return new Promise((resolve, reject) => {
+      // Handle both flat (from Zustand) and nested (from Project type) structures
+      let clips = project.clips
+      let trackItems = project.trackItems
       
-      const interval = setInterval(() => {
-        progress += 10
-        this.emit('export:progress', { progress, timemark: `${progress}` })
-        
-        if (progress >= 100) {
-          clearInterval(interval)
-          this.emit('export:end', { outputPath })
-          resolve()
+      // If nested structure (with tracks), flatten it
+      if (project.tracks && !trackItems) {
+        trackItems = {}
+        for (const track of project.tracks) {
+          for (const item of track.items) {
+            trackItems[item.id] = item
+          }
         }
-      }, 100)
+      }
+      
+      // Sort trackItems by position
+      const sortedItems = Object.values(trackItems as any[]).sort((a: any, b: any) => 
+        a.trackPosition - b.trackPosition
+      )
+      
+      if (sortedItems.length === 0) {
+        reject(new Error('No track items to export'))
+        return
+      }
+      
+      // Build FFmpeg command with filter_complex
+      let command = ffmpeg()
+      
+      // Add input files (we need one input per unique clipId)
+      const uniqueClipIds = [...new Set(sortedItems.map((item: any) => item.clipId))]
+      
+      for (const clipId of uniqueClipIds) {
+        const clip = clips[clipId]
+        if (!clip) {
+          console.warn(`[FFmpeg] Clip not found: ${clipId}`)
+          continue
+        }
+        command.input(clip.path)
+      }
+      
+      // Build filter_complex string:
+      // For each trackItem: trim + setpts (offset by trackPosition)
+      const filterParts: string[] = []
+      const concatInputs: string[] = []
+      
+      // Map clip inputs by their index
+      const clipIndexMap: Record<string, number> = {}
+      let inputIndex = 0
+      
+      for (const clipId of uniqueClipIds) {
+        clipIndexMap[clipId] = inputIndex++
+      }
+      
+      // Generate trim filters for each trackItem
+      let streamIndex = 0
+      for (const item of sortedItems) {
+        const itemData = item as any
+        const clip = clips[itemData.clipId]
+        if (!clip) continue
+        
+        const inputIndex = clipIndexMap[itemData.clipId]
+        
+        // Calculate trim: [inSec, outSec]
+        // Then offset by trackPosition for placement
+        const inSec = itemData.inSec || 0
+        const outSec = itemData.outSec || clip.duration
+        const position = itemData.trackPosition || 0
+        
+        // Trim the clip
+        // [i:v]trim=inSec:outSec,setpts=PTS-STARTPTS → [v0]
+        // Then offset by trackPosition: setpts=PTS+position/TB
+        
+        const filterLabel = `v${streamIndex}`
+        filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${filterLabel}]`)
+        concatInputs.push(`[${filterLabel}]`)
+        streamIndex++
+      }
+      
+      // Concatenate all trimmed segments
+      if (concatInputs.length > 0) {
+        filterParts.push(`${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]`)
+        
+        const filterComplex = filterParts.join(';')
+        console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
+        
+        command
+          .complexFilter(filterComplex)
+          .outputOptions(['-map [outv]'])
+          .outputOptions(['-c:v libx264', '-preset veryfast', '-crf 20'])
+          .outputOptions(['-c:a aac', '-b:a 192k']) // Audio codec (no audio for MVP)
+          .on('start', (cmdline) => {
+            console.log('[FFmpeg] Export started:', cmdline)
+          })
+          .on('progress', (progress) => {
+            // Emit progress updates
+            const percent = progress.percent || 0
+            this.emit('export:progress', { 
+              progress: percent, 
+              timemark: progress.timemark || '0:00:00'
+            })
+          })
+          .on('end', () => {
+            console.log('[FFmpeg] Export completed')
+            this.emit('export:end', { outputPath })
+            resolve()
+          })
+          .on('error', (err) => {
+            console.error('[FFmpeg] Export error:', err)
+            reject(err)
+          })
+          .save(outputPath)
+      } else {
+        reject(new Error('No valid track items found'))
+      }
     })
   }
 }

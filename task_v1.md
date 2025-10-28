@@ -143,11 +143,11 @@
 ## 📤 Export System
 
 ### PR 12: export/filter-complex
-- [ ] Implement exportTimeline(project, outPath) with complexFilter()
-- [ ] Compose trims + concat graph for all TrackItems
-- [ ] Use codecs: libx264 -preset veryfast -crf 20 -c:a aac
-- [ ] Emit progress events via IPC
-- [ ] Verify A/V sync and duration across multiple clips
+- [x] Implement exportTimeline(project, outPath) with complexFilter()
+- [x] Compose trims + concat graph for all TrackItems
+- [x] Use codecs: libx264 -preset veryfast -crf 20 -c:a aac
+- [x] Emit progress events via IPC
+- [ ] Verify A/V sync and duration across multiple clips (requires testing)
 
 ### PR 13: export/ui-progress
 - [ ] Add Export panel with progress bar
