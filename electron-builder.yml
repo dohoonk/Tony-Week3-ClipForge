@@ -18,6 +18,15 @@ files:
   - "!**/{*.map,*.zip,*.ico,*.png,*.jpg,*.jpeg,*.gif,*.webp,*.svg}"
   - "dist"
   - "package.json"
+
+# Include FFmpeg binaries as extra resources
+extraResources:
+  - from: "bin/mac"
+    to: "bin"
+    filter:
+      - "**/*"
+
+# macOS-specific configuration
 mac:
   category: public.app-category.utilities
   target:
@@ -25,6 +34,7 @@ mac:
       arch:
         - x64
         - arm64
+
 dmg:
   title: ClipForge
   backgroundColor: "#ffffff"

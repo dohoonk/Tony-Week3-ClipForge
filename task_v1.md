@@ -166,20 +166,20 @@
 - [ ] Maintain ≥55 fps
 
 ### PR 15: stability/error-handling
-- [ ] Add Renderer error boundary
-- [ ] Graceful IPC exception handling
-- [ ] Show "Export failed" dialog on FFmpeg crash
-- [ ] Add autosave recovery on crash
+- [x] Add Renderer error boundary
+- [x] Graceful IPC exception handling
+- [x] Show "Export failed" dialog on FFmpeg crash
+- [x] Add autosave recovery on crash
 
 ---
 
 ## 📦 Packaging & QA
 
 ### PR 16: build/electron-builder
-- [ ] Configure electron-builder for macOS DMG
-- [ ] Include FFmpeg binaries under extraResources
-- [ ] Add platform check for macOS-only binding
-- [ ] Test packaged app on clean macOS VM
+- [x] Configure electron-builder for macOS DMG
+- [x] Include FFmpeg binaries under extraResources
+- [x] Add platform check for macOS-only binding
+- [ ] Test packaged app on clean macOS VM (manual test required)
 
 ### PR 17: qa/smoke-tests
 - [ ] Import 3 clips, drag to timeline, split, and export

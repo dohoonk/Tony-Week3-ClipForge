@@ -3,6 +3,13 @@ import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
 import { projectIO } from './project-io'
 
+// Platform check: macOS only
+if (process.platform !== 'darwin') {
+  console.error('ClipForge is only supported on macOS')
+  app.quit()
+  process.exit(1)
+}
+
 let mainWindow: BrowserWindow | null = null
 
 const isDev = process.env.NODE_ENV === 'development'
