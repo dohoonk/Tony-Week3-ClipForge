@@ -208,17 +208,37 @@ export class ProjectIO {
       return project
     }
 
-    // Convert flat trackItems back to nested tracks
+    // Convert flat trackItems back to nested tracks, organized by trackId
     const serialized = { ...project }
-    if (project.trackItems) {
-      serialized.tracks = [
-        {
-          id: 'main',
+    
+    if (project.trackItems && project.tracks) {
+      // Group trackItems by trackId
+      const tracksMap: Record<string, any[]> = {}
+      Object.values(project.trackItems).forEach((item: any) => {
+        const trackId = item.trackId || 'track-1' // fallback to default track
+        if (!tracksMap[trackId]) {
+          tracksMap[trackId] = []
+        }
+        tracksMap[trackId].push(item)
+      })
+      
+      // Convert to array of tracks with their items
+      serialized.tracks = Object.entries(tracksMap).map(([trackId, items]) => {
+        const track = project.tracks[trackId] || {
+          id: trackId,
           kind: 'video',
-          items: Object.values(project.trackItems),
-        },
-      ]
+          order: 0,
+          visible: true,
+          name: trackId
+        }
+        return {
+          ...track,
+          items
+        }
+      }).sort((a, b) => (a.order || 0) - (b.order || 0))
+      
       delete serialized.trackItems
+      delete serialized.tracks // Remove the flat tracks object
     }
 
     return serialized
@@ -232,15 +252,32 @@ export class ProjectIO {
     const deserialized = { ...project }
 
     if (Array.isArray(project.tracks)) {
-      // Convert nested tracks to flat trackItems
+      // Restore tracks as a record
+      deserialized.tracks = {}
+      project.tracks.forEach((track: any) => {
+        const { items, ...trackData } = track
+        deserialized.tracks[track.id] = {
+          ...trackData,
+          order: trackData.order || trackData.id ? parseInt(trackData.id.split('-')[1] || '0') : 0,
+          visible: trackData.visible !== undefined ? trackData.visible : true,
+          name: trackData.name || `Track ${trackData.order || 0}`
+        }
+      })
+      
+      // Convert nested items to flat trackItems with trackId
       deserialized.trackItems = {}
       project.tracks.forEach((track: any) => {
         if (track.items) {
           track.items.forEach((item: any) => {
-            deserialized.trackItems[item.id] = item
+            deserialized.trackItems[item.id] = {
+              ...item,
+              trackId: item.trackId || track.id // Ensure trackId is set
+            }
           })
         }
       })
+      
+      // Remove the array tracks
       delete deserialized.tracks
     }
 

@@ -12,6 +12,7 @@ export type Clip = {
 export type TrackItem = {
   id: string
   clipId: string
+  trackId: string // NEW: Track association
   inSec: number // trim start within clip
   outSec: number // trim end within clip
   trackPosition: number // absolute timeline position (seconds)
@@ -20,7 +21,9 @@ export type TrackItem = {
 export type Track = {
   id: string
   kind: 'video' | 'overlay'
-  items: TrackItem[]
+  order: number
+  visible: boolean
+  name: string
 }
 
 export type Project = {
@@ -42,6 +45,7 @@ export type ClipForgeState = {
     updatedAt: string
   }
   clips: Record<string, Clip>
+  tracks: Record<string, Track>
   trackItems: Record<string, TrackItem>
   ui: {
     playheadSec: number

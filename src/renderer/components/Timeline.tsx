@@ -9,7 +9,7 @@ const MAX_ZOOM = 10
 
 export function Timeline() {
   const store = useStore()
-  const { trackItems, addTrackItem, setPlayheadSec, setIsPlaying } = store
+  const { trackItems, tracks, addTrackItem, addTrack, removeTrack, setPlayheadSec, setIsPlaying } = store
   const playheadSec = store.ui.playheadSec
   const isPlaying = store.ui.isPlaying
   const zoom = store.ui.zoom
@@ -74,6 +74,7 @@ export function Timeline() {
     const trackItem = {
       id: `trackitem-${Date.now()}-${Math.random()}`,
       clipId,
+      trackId: 'track-1', // Default track for now
       inSec: 0, // TODO: get from UI trim controls
       outSec: clipDuration,
       trackPosition: dropTime,
@@ -91,6 +92,32 @@ export function Timeline() {
   const handleDoubleClick = (trackItemId: string) => {
     console.log('[Timeline] Double clicked track item:', trackItemId)
     // TODO: Implement split at cursor
+  }
+
+  // Track management functions
+  const handleAddTrack = () => {
+    const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+    const nextOrder = sortedTracks.length > 0 ? Math.max(...sortedTracks.map(t => t.order)) + 1 : 0
+    const newTrack = {
+      id: `track-${Date.now()}`,
+      kind: 'video' as const,
+      order: nextOrder,
+      visible: true,
+      name: `Video Track ${nextOrder + 1}`
+    }
+    addTrack(newTrack)
+    console.log('[Timeline] Added new track:', newTrack)
+  }
+
+  const handleRemoveTrack = (trackId: string) => {
+    const trackItemsInTrack = Object.values(trackItems).filter(item => item.trackId === trackId)
+    if (trackItemsInTrack.length > 0) {
+      if (!confirm(`This track contains ${trackItemsInTrack.length} item(s). Are you sure you want to delete it?`)) {
+        return
+      }
+    }
+    removeTrack(trackId)
+    console.log('[Timeline] Removed track:', trackId)
   }
 
   const handlePlayheadClick = (e: React.MouseEvent) => {
@@ -200,6 +227,36 @@ export function Timeline() {
           </div>
         </div>
         
+        {/* Track Management */}
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={handleAddTrack}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded font-medium"
+          >
+            + Add Track
+          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {Object.values(tracks)
+              .sort((a, b) => a.order - b.order)
+              .map(track => (
+                <div
+                  key={track.id}
+                  className="flex items-center gap-2 px-2 py-1 bg-gray-700 rounded text-sm"
+                >
+                  <span className="text-gray-300">{track.name}</span>
+                  <button
+                    onClick={() => handleRemoveTrack(track.id)}
+                    className="text-red-400 hover:text-red-300 text-xs"
+                    title="Delete track"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+        
         {/* Zoom Controls */}
         <div className="flex items-center gap-3">
           <label className="text-xs text-gray-400">Zoom:</label>
@@ -234,7 +291,10 @@ export function Timeline() {
         <div 
           ref={timelineRef}
           className="relative bg-gray-900"
-          style={{ width: `${timelineWidth}px`, minHeight: '100%' }}
+          style={{ 
+            width: `${timelineWidth}px`, 
+            minHeight: `${Math.max(Object.values(tracks).length * TRACK_HEIGHT, 400)}px`
+          }}
           onDragOver={handleDragOver}
           onDragEnter={(e) => {
             e.preventDefault()
@@ -252,63 +312,88 @@ export function Timeline() {
           </div>
         )}
 
-        {/* Track area */}
-        <div className="absolute left-0 top-0" style={{ width: `${timelineWidth}px`, height: TRACK_HEIGHT }}>
-          {/* Playhead indicator - MUCH THICKER */}
-          <div 
-            className="absolute bg-red-500 z-50 pointer-events-none"
-            style={{ 
-              left: `${((playheadSec || 0) * pixelsPerSecond) - 2}px`, // Center 4px wide line
-              width: '4px',
-              height: `${PLAYHEAD_HEIGHT}px`,
-              transition: 'none',
-              boxShadow: '0 0 4px 2px rgba(239, 68, 68, 0.5)', // Red glow
-            }}
-          >
-            {/* Triangle at top */}
-            <div 
-              className="absolute -top-2 left-1/2 transform -translate-x-1/2"
-              style={{ 
-                width: '0', 
-                height: '0', 
-                borderLeft: '6px solid transparent',
-                borderRight: '6px solid transparent',
-                borderTop: '10px solid #ef4444'
-              }}
-            ></div>
-            
-            {/* Debug label */}
-            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-red-500 font-bold whitespace-nowrap bg-gray-900 px-1">
-              {Math.floor(playheadSec)}s
-            </div>
-          </div>
-
-          {/* Track items */}
-          {sortedItems.map((item) => {
-            // Get clip duration from store for proper width
-            const clip = useStore.getState().clips[item.clipId]
-            const itemDuration = (item.outSec - item.inSec) || 10 // fallback to 10 seconds
-            const itemWidth = itemDuration * pixelsPerSecond
-            
-            return (
-              <div
-                key={item.id}
-                className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
-                style={{
-                  left: `${item.trackPosition * pixelsPerSecond}px`,
-                  width: `${itemWidth}px`,
-                  height: `${TRACK_HEIGHT - 10}px`,
-                  top: '5px',
-                }}
-                onClick={() => handleClick(item.id)}
-                onDoubleClick={() => handleDoubleClick(item.id)}
-              >
-                <div className="p-2 text-white text-xs truncate">
-                  {clip?.name || 'TrackItem'}
+        {/* Multi-track area */}
+        <div className="absolute left-0 top-0" style={{ width: `${timelineWidth}px` }}>
+          {/* Render each track */}
+          {Object.values(tracks)
+            .sort((a, b) => a.order - b.order)
+            .map((track) => {
+              const trackItems = Object.values(trackItems).filter(item => item.trackId === track.id)
+              const trackTop = track.order * TRACK_HEIGHT
+              
+              return (
+                <div
+                  key={track.id}
+                  className="relative border-b border-gray-700"
+                  style={{
+                    top: `${trackTop}px`,
+                    width: `${timelineWidth}px`,
+                    height: `${TRACK_HEIGHT}px`
+                  }}
+                >
+                  {/* Track label */}
+                  <div className="absolute left-0 top-0 w-32 h-full bg-gray-800 border-r border-gray-700 flex items-center px-2 z-10">
+                    <span className="text-xs text-gray-300 truncate">{track.name}</span>
+                  </div>
+                  
+                  {/* Playhead indicator for this track */}
+                  <div 
+                    className="absolute bg-red-500 z-50 pointer-events-none"
+                    style={{ 
+                      left: `${((playheadSec || 0) * pixelsPerSecond) - 2}px`,
+                      width: '4px',
+                      height: `${TRACK_HEIGHT}px`,
+                      top: '0px',
+                      transition: 'none',
+                      boxShadow: '0 0 4px 2px rgba(239, 68, 68, 0.5)',
+                    }}
+                  >
+                    {/* Triangle at top */}
+                    <div 
+                      className="absolute -top-2 left-1/2 transform -translate-x-1/2"
+                      style={{ 
+                        width: '0', 
+                        height: '0', 
+                        borderLeft: '6px solid transparent',
+                        borderRight: '6px solid transparent',
+                        borderTop: '10px solid #ef4444'
+                      }}
+                    ></div>
+                    
+                    {/* Debug label */}
+                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-red-500 font-bold whitespace-nowrap bg-gray-900 px-1">
+                      {Math.floor(playheadSec)}s
+                    </div>
+                  </div>
+                  
+                  {/* Track items */}
+                  {trackItems.map((item) => {
+                    const clip = store.clips[item.clipId]
+                    const itemDuration = (item.outSec - item.inSec) || 10
+                    const itemWidth = itemDuration * pixelsPerSecond
+                    
+                    return (
+                      <div
+                        key={item.id}
+                        className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
+                        style={{
+                          left: `${item.trackPosition * pixelsPerSecond}px`,
+                          width: `${itemWidth}px`,
+                          height: `${TRACK_HEIGHT - 10}px`,
+                          top: '5px',
+                        }}
+                        onClick={() => handleClick(item.id)}
+                        onDoubleClick={() => handleDoubleClick(item.id)}
+                      >
+                        <div className="p-2 text-white text-xs truncate">
+                          {clip?.name || 'TrackItem'}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
         </div>
 
         {/* Empty state */}
