@@ -112,10 +112,10 @@
 ## ▶️ Playback System
 
 ### PR 9: player/basic-playback
-- [ ] Add <video> element for preview
-- [ ] Load selected clip via file:// URI
-- [ ] Add play/pause/loop controls
-- [ ] Validate audio output works by default
+- [x] Add <video> element for preview
+- [x] Load selected clip via file:// URI (first clip auto-loaded)
+- [x] Add play/pause/loop controls
+- [x] Validate audio output works by default
 
 ### PR 10: timeline/playhead-sync
 - [ ] Connect video.timeupdate → Zustand playheadSec

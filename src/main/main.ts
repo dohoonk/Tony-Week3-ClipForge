@@ -15,6 +15,7 @@ function createWindow() {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false, // Allow local file:// URLs for video playback
     },
   })
 

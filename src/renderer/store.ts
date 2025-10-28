@@ -15,6 +15,7 @@ interface ClipForgeActions {
   setPlayheadSec: (seconds: number) => void
   setZoom: (zoom: number) => void
   setSelectedId: (id?: string) => void
+  setIsPlaying: (isPlaying: boolean) => void
 }
 
 type ClipForgeStore = ClipForgeState & ClipForgeActions
@@ -34,6 +35,7 @@ export const useStore = create<ClipForgeStore>((set) => ({
     playheadSec: 0,
     zoom: 1,
     selectedId: undefined,
+    isPlaying: false,
   },
   
   // Actions
@@ -69,6 +71,10 @@ export const useStore = create<ClipForgeStore>((set) => ({
   
   setSelectedId: (id?: string) => set((state) => ({
     ui: { ...state.ui, selectedId: id }
+  })),
+  
+  setIsPlaying: (isPlaying: boolean) => set((state) => ({
+    ui: { ...state.ui, isPlaying }
   })),
 }))
 

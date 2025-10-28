@@ -1,6 +1,7 @@
 import React from 'react'
 import { MediaLibrary } from './components/MediaLibrary'
 import { Timeline } from './components/Timeline'
+import { Player } from './components/Player'
 import { ExportPanel } from './components/ExportPanel'
 
 function App() {
@@ -11,7 +12,10 @@ function App() {
       </header>
       <main className="flex flex-1 overflow-hidden">
         <MediaLibrary />
-        <Timeline />
+        <div className="flex-1 flex flex-col">
+          <Player />
+          <Timeline />
+        </div>
         <ExportPanel />
       </main>
     </div>

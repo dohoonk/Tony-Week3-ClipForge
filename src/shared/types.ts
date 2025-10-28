@@ -47,6 +47,7 @@ export type ClipForgeState = {
     playheadSec: number
     zoom: number // multiplier (0.5x - 10x)
     selectedId?: string // selected trackItem
+    isPlaying: boolean
   }
 }
 
