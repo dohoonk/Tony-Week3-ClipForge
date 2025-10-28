@@ -9,8 +9,9 @@ const MAX_ZOOM = 10
 
 export function Timeline() {
   const store = useStore()
-  const { trackItems, addTrackItem, setPlayheadSec } = store
+  const { trackItems, addTrackItem, setPlayheadSec, setIsPlaying } = store
   const playheadSec = store.ui.playheadSec
+  const isPlaying = store.ui.isPlaying
   const zoom = store.ui.zoom
   const setZoom = store.setZoom
   
@@ -64,12 +65,16 @@ export function Timeline() {
 
     console.log('[Timeline] Drop at:', dropTime, 'seconds')
 
+    // Get clip from store to use actual duration
+    const clip = store.clips[clipId]
+    const clipDuration = clip?.duration || 10 // fallback to 10 if no duration
+    
     // Create new track item
     const trackItem = {
       id: `trackitem-${Date.now()}-${Math.random()}`,
       clipId,
       inSec: 0, // TODO: get from UI trim controls
-      outSec: 10, // TODO: get from clip.duration
+      outSec: clipDuration,
       trackPosition: dropTime,
     }
 
@@ -96,6 +101,12 @@ export function Timeline() {
     
     console.log('[Timeline] Playhead click at:', clickTime, 'seconds')
     setPlayheadSec(clickTime)
+    // Pause video when seeking to new position
+    setIsPlaying(false)
+  }
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying)
   }
 
   const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,13 +133,50 @@ export function Timeline() {
     a.trackPosition - b.trackPosition
   )
 
+  // Calculate timeline width based on track items and clip durations
+  const calculateTimelineWidth = () => {
+    if (sortedItems.length === 0) {
+      // Default to 60 seconds if no items
+      return Math.max(60 * pixelsPerSecond, scrollContainerRef.current?.clientWidth || 800)
+    }
+
+    // Find the rightmost edge of all track items
+    let maxTime = 0
+    for (const item of sortedItems) {
+      const clip = store.clips[item.clipId]
+      const itemDuration = (item.outSec - item.inSec) || (clip?.duration || 0)
+      const endTime = item.trackPosition + itemDuration
+      if (endTime > maxTime) {
+        maxTime = endTime
+      }
+    }
+
+    // Add padding (10 seconds) and ensure minimum width
+    const timelineSeconds = Math.max(maxTime + 10, 60)
+    return Math.max(timelineSeconds * pixelsPerSecond, scrollContainerRef.current?.clientWidth || 800)
+  }
+
+  const timelineWidth = calculateTimelineWidth()
+
   return (
     <section className="flex-1 flex flex-col border-r border-gray-700 bg-gray-900">
       <div className="p-4 border-b border-gray-700 bg-gray-800">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-white">Timeline</h2>
-          <div className="text-sm text-gray-400">
-            Playhead: {Math.floor(playheadSec)}s | Items: {sortedItems.length}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePlayPause}
+              className={`px-3 py-1 rounded text-sm font-medium ${
+                isPlaying 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              {isPlaying ? '⏸ Pause' : '▶ Play'}
+            </button>
+            <div className="text-sm text-gray-400">
+              Playhead: {Math.floor(playheadSec)}s | Items: {sortedItems.length}
+            </div>
           </div>
         </div>
         
@@ -158,7 +206,7 @@ export function Timeline() {
         <div 
           ref={timelineRef}
           className="relative bg-gray-900"
-          style={{ minWidth: '100%', height: '100%' }}
+          style={{ width: `${timelineWidth}px`, minHeight: '100%' }}
           onDragOver={handleDragOver}
           onDragEnter={(e) => {
             e.preventDefault()
@@ -177,7 +225,7 @@ export function Timeline() {
         )}
 
         {/* Track area */}
-        <div className="absolute left-0 top-0 w-full" style={{ height: TRACK_HEIGHT }}>
+        <div className="absolute left-0 top-0" style={{ width: `${timelineWidth}px`, height: TRACK_HEIGHT }}>
           {/* Playhead indicator */}
           <div 
             className="absolute w-0.5 bg-blue-500 z-30 transition-all pointer-events-none"

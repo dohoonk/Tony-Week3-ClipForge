@@ -2,7 +2,7 @@ import React from 'react'
 
 export function ExportPanel() {
   return (
-    <aside className="w-64 h-full border-r border-gray-700 p-4">
+    <aside className="w-64 h-full border-l border-gray-700 p-4 overflow-auto" style={{ minWidth: '200px', flexShrink: 0 }}>
       <h2 className="text-lg font-semibold mb-4 text-white">Export Panel</h2>
       <div className="space-y-2">
         <p className="text-sm text-gray-400">

@@ -69,27 +69,51 @@ export function Player() {
     }
   }
 
-  // Sync playhead with video timeupdate
+  // Sync playhead with video timeupdate (throttled to ~30fps)
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
 
+    let lastUpdate = 0
+    const throttleMs = 33 // ~30fps
+
     const handleTimeUpdate = () => {
-      useStore.getState().setPlayheadSec(video.currentTime)
+      const now = Date.now()
+      if (now - lastUpdate >= throttleMs) {
+        useStore.getState().setPlayheadSec(video.currentTime)
+        lastUpdate = now
+      }
+    }
+
+    // Use requestAnimationFrame for smooth animation
+    let rafId: number
+    const handleFrame = () => {
+      handleTimeUpdate()
+      rafId = requestAnimationFrame(handleFrame)
     }
 
     video.addEventListener('timeupdate', handleTimeUpdate)
-    return () => video.removeEventListener('timeupdate', handleTimeUpdate)
+    rafId = requestAnimationFrame(handleFrame)
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+      cancelAnimationFrame(rafId)
+    }
   }, [])
 
   // Sync playhead dragging to video (when user clicks timeline)
   useEffect(() => {
     const video = videoRef.current
-    if (!video || Math.abs(video.currentTime - playheadSec) < 0.5) {
-      return // Avoid feedback loop
+    if (!video || !videoSrc) return
+
+    // Throttle video position updates to avoid feedback loops
+    const timeDifference = Math.abs(video.currentTime - playheadSec)
+    
+    // Only update if difference is significant (>0.1s) or if video is paused
+    if (timeDifference > 0.1 || !isPlaying) {
+      video.currentTime = playheadSec
     }
-    video.currentTime = playheadSec
-  }, [playheadSec])
+  }, [playheadSec, isPlaying, videoSrc])
 
   // Handle play/pause from store
   useEffect(() => {
@@ -103,9 +127,9 @@ export function Player() {
   }, [isPlaying])
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-900 border-b border-gray-700">
+    <div className="flex flex-col bg-gray-900 border-b border-gray-700" style={{ maxHeight: '300px' }}>
       {/* Video Player */}
-      <div className="flex-1 relative bg-black flex items-center justify-center min-h-[300px] overflow-hidden" style={{ height: '100%', width: '100%' }}>
+      <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ height: '280px', width: '100%' }}>
         <video
           ref={videoRef}
           className="w-full h-full object-contain"

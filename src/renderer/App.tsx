@@ -10,9 +10,9 @@ function App() {
       <header className="p-4 border-b border-gray-700 bg-gray-800">
         <h1 className="text-2xl font-bold text-white">ClipForge</h1>
       </header>
-      <main className="flex flex-1 overflow-hidden">
+      <main className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         <MediaLibrary />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
           <Player />
           <Timeline />
         </div>
