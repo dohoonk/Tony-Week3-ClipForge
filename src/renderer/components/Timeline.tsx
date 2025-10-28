@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react'
+import React, { useState, useRef, useMemo, useEffect } from 'react'
 import { useStore } from '../store'
 
 const BASE_PIXELS_PER_SEC = 50 // 1x zoom
@@ -158,6 +158,25 @@ export function Timeline() {
 
   const timelineWidth = calculateTimelineWidth()
 
+  // Auto-scroll timeline when playhead approaches the right edge
+  useEffect(() => {
+    if (!scrollContainerRef.current || !isPlaying) return
+    
+    const containerWidth = scrollContainerRef.current.clientWidth
+    const playheadPosition = (playheadSec || 0) * pixelsPerSecond
+    const scrollPosition = scrollContainerRef.current.scrollLeft
+    const visibleRight = scrollPosition + containerWidth
+    
+    // Scroll when playhead is within 20% of the right edge
+    const scrollMargin = containerWidth * 0.2
+    
+    if (playheadPosition + scrollMargin > visibleRight) {
+      const newScrollLeft = playheadPosition - containerWidth + scrollMargin + scrollMargin
+      scrollContainerRef.current.scrollLeft = newScrollLeft
+      setScrollLeft(newScrollLeft)
+    }
+  }, [playheadSec, isPlaying, pixelsPerSecond])
+
   return (
     <section className="flex-1 flex flex-col border-r border-gray-700 bg-gray-900">
       <div className="p-4 border-b border-gray-700 bg-gray-800">
@@ -226,15 +245,33 @@ export function Timeline() {
 
         {/* Track area */}
         <div className="absolute left-0 top-0" style={{ width: `${timelineWidth}px`, height: TRACK_HEIGHT }}>
-          {/* Playhead indicator */}
+          {/* Playhead indicator - MUCH THICKER */}
           <div 
-            className="absolute w-0.5 bg-blue-500 z-30 transition-all pointer-events-none"
+            className="absolute bg-red-500 z-50 pointer-events-none"
             style={{ 
-              left: `${playheadSec * pixelsPerSecond}px`,
+              left: `${((playheadSec || 0) * pixelsPerSecond) - 2}px`, // Center 4px wide line
+              width: '4px',
               height: `${PLAYHEAD_HEIGHT}px`,
+              transition: 'none',
+              boxShadow: '0 0 4px 2px rgba(239, 68, 68, 0.5)', // Red glow
             }}
           >
-            <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-8 border-transparent border-t-blue-500"></div>
+            {/* Triangle at top */}
+            <div 
+              className="absolute -top-2 left-1/2 transform -translate-x-1/2"
+              style={{ 
+                width: '0', 
+                height: '0', 
+                borderLeft: '6px solid transparent',
+                borderRight: '6px solid transparent',
+                borderTop: '10px solid #ef4444'
+              }}
+            ></div>
+            
+            {/* Debug label */}
+            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-red-500 font-bold whitespace-nowrap bg-gray-900 px-1">
+              {Math.floor(playheadSec)}s
+            </div>
           </div>
 
           {/* Track items */}

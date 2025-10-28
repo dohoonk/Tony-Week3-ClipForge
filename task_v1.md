@@ -118,24 +118,24 @@
 - [x] Validate audio output works by default
 
 ### PR 10: timeline/playhead-sync
-- [ ] Connect video.timeupdate → Zustand playheadSec
-- [ ] Dragging playhead updates video.currentTime
-- [ ] Throttle sync to ~30fps for scrubbing
-- [ ] Animate playhead via requestAnimationFrame
-- [ ] Ensure bi-directional sync
+- [x] Connect video.timeupdate → Zustand playheadSec
+- [x] Dragging playhead updates video.currentTime
+- [x] Throttle sync to ~30fps for scrubbing
+- [x] Animate playhead via requestAnimationFrame
+- [x] Ensure bi-directional sync
 
 ---
 
 ## 🎥 Recording System
 
 ### PR 11: record/screen-webcam
-- [ ] Build Record/Stop UI
-- [ ] Capture screen via desktopCapturer
-- [ ] Capture webcam via getUserMedia
-- [ ] Save as .webm (VP8/Opus) to ~/Movies/ClipForge/recordings/
-- [ ] Add 30-min timeout and disk space check
-- [ ] Emit recording:completed event via IPC
-- [ ] Renderer listens via window.clipforge.onRecordingComplete()
+- [x] Build Record/Stop UI
+- [x] Capture screen via desktopCapturer
+- [x] Capture webcam via getUserMedia
+- [x] Save as .webm (VP8/Opus) to ~/Movies/ClipForge/recordings/
+- [x] Add 30-min timeout and disk space check
+- [x] Emit recording:completed event via IPC
+- [x] Renderer listens via window.clipforge.onRecordingComplete()
 - [ ] Auto-add clip to library after save
 
 ---

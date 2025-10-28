@@ -114,6 +114,8 @@ export function Player() {
     if (!video) return
 
     let lastUpdate = 0
+    let frameCount = 0
+    let debugStartTime = Date.now()
     const throttleMs = 33 // ~30fps
 
     const handleTimeUpdate = () => {
@@ -121,6 +123,14 @@ export function Player() {
       if (now - lastUpdate >= throttleMs) {
         useStore.getState().setPlayheadSec(video.currentTime)
         lastUpdate = now
+        frameCount++
+        
+        // Debug: log FPS every second
+        if (frameCount % 30 === 0) {
+          const elapsed = (Date.now() - debugStartTime) / 1000
+          const fps = frameCount / elapsed
+          console.log(`[Player] Playhead updates: ~${fps.toFixed(1)} fps (target: 30fps)`)
+        }
       }
     }
 
