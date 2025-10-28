@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from 'electron'
+import { ffmpegWrapper } from './ffmpeg-wrapper'
 
 // Type definitions for IPC handlers
 type Clip = {
@@ -49,30 +50,31 @@ export function setupIpcHandlers() {
     return result.filePaths
   })
 
-  // probe - Extract metadata from video file (placeholder for PR 4)
-  ipcMain.handle('probe', async (_event, path: string) => {
+  // probe - Extract metadata from video file using FFprobe
+  ipcMain.handle('probe', async (_event, filePath: string) => {
     // Input validation
-    if (!path || typeof path !== 'string') {
+    if (!filePath || typeof filePath !== 'string') {
       throw new Error('Invalid path: path must be a non-empty string')
     }
 
     // Path sanitization - basic check for relative paths
-    if (path.includes('..')) {
+    if (filePath.includes('..')) {
       throw new Error('Invalid path: directory traversal not allowed')
     }
 
-    // Placeholder implementation
-    console.log(`[IPC] probe called for path: ${path}`)
+    console.log(`[IPC] probe called for: ${filePath}`)
     
-    // Will be implemented in PR 4 with FFprobe
-    return {
-      duration: 0,
-      width: 0,
-      height: 0,
+    try {
+      const metadata = await ffmpegWrapper.probe(filePath)
+      console.log(`[IPC] probe result:`, metadata)
+      return metadata
+    } catch (error) {
+      console.error('[IPC] Probe failed:', error)
+      throw error
     }
   })
 
-  // exportTimeline - Export project to MP4 (placeholder for PR 12)
+  // exportTimeline - Export project to MP4 with progress events
   ipcMain.handle('exportTimeline', async (_event, project: Project, outPath: string) => {
     // Input validation
     if (!project || typeof project !== 'object') {
@@ -85,8 +87,25 @@ export function setupIpcHandlers() {
 
     console.log(`[IPC] exportTimeline called for: ${outPath}`)
     
-    // Will be implemented in PR 12 with fluent-ffmpeg
-    return new Promise((resolve) => setTimeout(resolve, 100))
+    // Mock export with progress events (real implementation in PR 12)
+    try {
+      await ffmpegWrapper.exportTimeline(project, outPath)
+      console.log('[IPC] exportTimeline completed')
+      return
+    } catch (error) {
+      console.error('[IPC] Export failed:', error)
+      throw error
+    }
+  })
+
+  // Setup progress event forwarding
+  ffmpegWrapper.on('export:progress', (data: any) => {
+    console.log('[IPC] Export progress:', data.progress + '%')
+    // Send to all windows (will be improved in PR 13)
+  })
+
+  ffmpegWrapper.on('export:end', (data: any) => {
+    console.log('[IPC] Export completed:', data.outputPath)
   })
 
   // saveProject - Save project JSON to disk (placeholder for PR 5)

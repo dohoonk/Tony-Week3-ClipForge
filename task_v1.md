@@ -39,14 +39,14 @@
 ## 🎬 FFmpeg Integration
 
 ### PR 4: backend/ffmpeg-wrapper-and-test
-- [ ] Install fluent-ffmpeg and type definitions
-- [ ] Bundle ffmpeg and ffprobe under /bin/mac via extraResources
-- [ ] Implement bindFfBins() for macOS path resolution
-- [ ] Implement probe(path) returning { duration, width, height }
-- [ ] Store all metadata in Zustand clip store
-- [ ] Add progress event emitter for mock export
-- [ ] Write Jest tests simulating probe + progress logs
-- [ ] Verify FFmpeg invocation works in Main
+- [x] Install fluent-ffmpeg and type definitions
+- [ ] Bundle ffmpeg and ffprobe under /bin/mac via extraResources (use system FFmpeg for dev)
+- [x] Implement bindFfBins() for macOS path resolution
+- [x] Implement probe(path) returning { duration, width, height }
+- [ ] Store all metadata in Zustand clip store (PR 6)
+- [x] Add progress event emitter for mock export
+- [ ] Write Jest tests simulating probe + progress logs (manual test only)
+- [x] Verify FFmpeg invocation works in Main
 
 ---
 
