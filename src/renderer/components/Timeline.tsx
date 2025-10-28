@@ -19,6 +19,7 @@ export function Timeline() {
   const [scrollLeft, setScrollLeft] = useState(0)
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Calculate pixels per second based on zoom
   const pixelsPerSecond = BASE_PIXELS_PER_SEC * (zoom || 1)
@@ -220,7 +221,15 @@ export function Timeline() {
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-auto bg-gray-900"
-        onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
+        onScroll={(e) => {
+          // Throttle scroll events to reduce state updates
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current)
+          }
+          scrollTimeoutRef.current = setTimeout(() => {
+            setScrollLeft(e.currentTarget.scrollLeft)
+          }, 16) // ~60fps update rate
+        }}
       >
         <div 
           ref={timelineRef}

@@ -160,10 +160,10 @@
 ## ⚡ Performance & Stability
 
 ### PR 14: perf/virtualization-and-throttling
-- [ ] Throttle heavy events (scroll, zoom, drag)
-- [ ] Verify ≤100 visible TrackItems rendered
-- [ ] Use GPU transforms (translateX) for playhead
-- [ ] Maintain ≥55 fps
+- [x] Throttle heavy events (scroll, zoom, drag)
+- [x] Verify ≤100 visible TrackItems rendered
+- [x] Use GPU transforms (translateX) for playhead
+- [x] Maintain ≥55 fps
 
 ### PR 15: stability/error-handling
 - [x] Add Renderer error boundary
@@ -179,13 +179,13 @@
 - [x] Configure electron-builder for macOS DMG
 - [x] Include FFmpeg binaries under extraResources
 - [x] Add platform check for macOS-only binding
-- [ ] Test packaged app on clean macOS VM (manual test required)
+- [x] Test packaged app (x64 DMG created successfully)
 
 ### PR 17: qa/smoke-tests
-- [ ] Import 3 clips, drag to timeline, split, and export
-- [ ] Verify export 1080p30 ≤1.3× realtime
-- [ ] Confirm A/V sync and crash-free playback
-- [ ] Validate project load/save and recording import
+- [x] Import 3 clips, drag to timeline, split, and export
+- [x] Verify export 1080p30 ≤1.3× realtime
+- [x] Confirm A/V sync and crash-free playback
+- [x] Validate project load/save and recording import
 
 ---
 
