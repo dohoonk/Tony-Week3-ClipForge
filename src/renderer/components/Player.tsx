@@ -15,7 +15,15 @@ export function Player() {
   // Get the currently playing clip path
   const getCurrentVideoPath = () => {
     // TODO: Get from selected track item
-    const firstClip = Object.values(clips)[0]
+    const availableClips = Object.values(clips).filter(clip => {
+      // Skip mock recordings that don't exist yet
+      if (clip.duration === 0 && clip.path.includes('/recordings/')) {
+        return false
+      }
+      return true
+    })
+    
+    const firstClip = availableClips[0]
     if (firstClip) {
       // Electron can handle local file paths directly
       // No need for file:// protocol prefix
@@ -56,18 +64,74 @@ export function Player() {
     }
   }, [videoSrc])
 
-  // Listen for recording completion
+  // Listen for recording completion with deduplication
   useEffect(() => {
-    const handleRecordingComplete = (path: string, metadata: any) => {
+    let isMounted = true
+    const processedPaths = new Set<string>()
+    
+    const handleRecordingComplete = async (path: string, metadata: any) => {
+      if (!isMounted) return
+      
       console.log('[Player] Recording completed:', path, metadata)
-      // The clip will be auto-added to library by main process
+      
+      // Check if we've already processed this path
+      if (processedPaths.has(path)) {
+        console.log('[Player] This recording already processed, skipping:', path)
+        return
+      }
+      
+      processedPaths.add(path)
       setIsRecording(false)
+      
+      try {
+        // Double-check in store to prevent duplicates
+        const existingClips = useStore.getState().clips
+        const isDuplicate = Object.values(existingClips).some(clip => clip.path === path)
+        
+        if (isDuplicate) {
+          console.log('[Player] Clip already in library, skipping')
+          return
+        }
+        
+        // Try to probe the recorded file for full metadata
+        let fullMetadata = metadata
+        
+        try {
+          // Attempt to probe the actual file
+          const probedData = await window.clipforge.probe(path)
+          fullMetadata = probedData
+          console.log('[Player] Successfully probed recorded file')
+        } catch (probeError) {
+          // If probe fails (mock recording or file doesn't exist yet),
+          // use the metadata from the completion event
+          console.warn('[Player] Probe failed, using event metadata:', probeError)
+        }
+        
+        const fileName = path.split('/').pop() || `recording_${Date.now()}.webm`
+        
+        // Create clip object with fallback values
+        const clip = {
+          id: `clip-${Date.now()}-${Math.random()}`,
+          name: fileName,
+          path: path,
+          duration: fullMetadata.duration || metadata.duration || 0,
+          width: fullMetadata.width || metadata.width || 1920,
+          height: fullMetadata.height || metadata.height || 1080,
+        }
+        
+        // Add to media library
+        useStore.getState().addClip(clip)
+        console.log('[Player] Auto-added recorded clip to library:', clip.name)
+      } catch (error) {
+        console.error('[Player] Failed to add recorded clip:', error)
+      }
     }
 
     window.clipforge.onRecordingComplete(handleRecordingComplete)
     
     return () => {
-      // Cleanup if needed
+      isMounted = false
+      processedPaths.clear()
     }
   }, [])
 

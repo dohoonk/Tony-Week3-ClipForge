@@ -136,7 +136,7 @@
 - [x] Add 30-min timeout and disk space check
 - [x] Emit recording:completed event via IPC
 - [x] Renderer listens via window.clipforge.onRecordingComplete()
-- [ ] Auto-add clip to library after save
+- [x] Auto-add clip to library after save
 
 ---
 
