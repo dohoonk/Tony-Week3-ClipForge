@@ -100,14 +100,21 @@ export function setupIpcHandlers() {
     }
   })
 
-  // Setup progress event forwarding
+  // Setup progress event forwarding to all windows
+  const sendToAllWindows = (channel: string, ...args: any[]) => {
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send(channel, ...args)
+    })
+  }
+
   ffmpegWrapper.on('export:progress', (data: any) => {
     console.log('[IPC] Export progress:', data.progress + '%')
-    // Send to all windows (will be improved in PR 13)
+    sendToAllWindows('export:progress', data)
   })
 
   ffmpegWrapper.on('export:end', (data: any) => {
     console.log('[IPC] Export completed:', data.outputPath)
+    sendToAllWindows('export:end', data)
   })
 
   // saveProject - Save project JSON to disk

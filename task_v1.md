@@ -150,10 +150,10 @@
 - [ ] Verify A/V sync and duration across multiple clips (requires testing)
 
 ### PR 13: export/ui-progress
-- [ ] Add Export panel with progress bar
-- [ ] Subscribe to IPC progress updates
-- [ ] Display % completion, disable export button during encode
-- [ ] Show success/error message on completion
+- [x] Add Export panel with progress bar
+- [x] Subscribe to IPC progress updates
+- [x] Display % completion, disable export button during encode
+- [x] Show success/error message on completion
 
 ---
 

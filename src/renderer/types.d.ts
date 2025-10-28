@@ -19,6 +19,8 @@ interface Window {
     
     // Event listeners
     onRecordingComplete: (callback: (path: string, metadata: any) => void) => void
+    onExportProgress: (callback: (data: { progress: number; timemark: string }) => void) => void
+    onExportEnd: (callback: (data: { outputPath: string }) => void) => void
   }
 }
 

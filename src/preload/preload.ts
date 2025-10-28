@@ -26,5 +26,17 @@ contextBridge.exposeInMainWorld('clipforge', {
       callback(path, metadata)
     )
   },
+  
+  onExportProgress: (callback: (data: { progress: number; timemark: string }) => void) => {
+    ipcRenderer.on('export:progress', (_event, data: any) => 
+      callback(data)
+    )
+  },
+  
+  onExportEnd: (callback: (data: { outputPath: string }) => void) => {
+    ipcRenderer.on('export:end', (_event, data: any) => 
+      callback(data)
+    )
+  },
 })
 
