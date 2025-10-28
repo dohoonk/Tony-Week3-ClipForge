@@ -9,6 +9,8 @@ export function Player() {
   const playheadSec = store.ui.playheadSec
   const isPlaying = store.ui.isPlaying
   const [loopEnabled, setLoopEnabled] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingType, setRecordingType] = useState<'screen' | 'webcam'>('screen')
 
   // Get the currently playing clip path
   const getCurrentVideoPath = () => {
@@ -54,6 +56,21 @@ export function Player() {
     }
   }, [videoSrc])
 
+  // Listen for recording completion
+  useEffect(() => {
+    const handleRecordingComplete = (path: string, metadata: any) => {
+      console.log('[Player] Recording completed:', path, metadata)
+      // The clip will be auto-added to library by main process
+      setIsRecording(false)
+    }
+
+    window.clipforge.onRecordingComplete(handleRecordingComplete)
+    
+    return () => {
+      // Cleanup if needed
+    }
+  }, [])
+
   const handlePlay = () => {
     videoRef.current?.play()
   }
@@ -66,6 +83,28 @@ export function Player() {
     setLoopEnabled(!loopEnabled)
     if (videoRef.current) {
       videoRef.current.loop = !loopEnabled
+    }
+  }
+
+  const handleStartRecording = async () => {
+    try {
+      setIsRecording(true)
+      await window.clipforge.startRecording(recordingType)
+      console.log('[Player] Recording started:', recordingType)
+    } catch (error) {
+      console.error('[Player] Failed to start recording:', error)
+      setIsRecording(false)
+    }
+  }
+
+  const handleStopRecording = async () => {
+    try {
+      await window.clipforge.stopRecording()
+      console.log('[Player] Recording stopped')
+      setIsRecording(false)
+    } catch (error) {
+      console.error('[Player] Failed to stop recording:', error)
+      setIsRecording(false)
     }
   }
 
@@ -169,6 +208,35 @@ export function Player() {
           >
             🔁 Loop
           </button>
+        </div>
+        
+        {/* Recording Controls */}
+        <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-700">
+          <select
+            value={recordingType}
+            onChange={(e) => setRecordingType(e.target.value as 'screen' | 'webcam')}
+            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+            disabled={isRecording}
+          >
+            <option value="screen">Screen</option>
+            <option value="webcam">Webcam</option>
+          </select>
+          
+          {!isRecording ? (
+            <button
+              onClick={handleStartRecording}
+              className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded text-white font-medium"
+            >
+              🔴 Start Recording
+            </button>
+          ) : (
+            <button
+              onClick={handleStopRecording}
+              className="px-6 py-2 bg-red-800 hover:bg-red-900 rounded text-white font-medium animate-pulse"
+            >
+              ⏹ Stop Recording
+            </button>
+          )}
         </div>
         
         {/* Time Display */}

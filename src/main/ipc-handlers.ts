@@ -1,6 +1,7 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { ffmpegWrapper } from './ffmpeg-wrapper'
 import { projectIO } from './project-io'
+import { recordingService } from './recording-service'
 
 // Type definitions for IPC handlers
 type Clip = {
@@ -135,20 +136,57 @@ export function setupIpcHandlers() {
     }
   })
 
-  // startRecording - Begin screen/webcam recording (placeholder for PR 11)
-  ipcMain.handle('startRecording', async (_event, options: any) => {
-    console.log('[IPC] startRecording called with options:', options)
+  // startRecording - Begin screen/webcam recording
+  ipcMain.handle('startRecording', async (event, type: 'screen' | 'webcam') => {
+    console.log('[IPC] startRecording called for type:', type)
     
-    // Will be implemented in PR 11
-    return { success: true }
+    try {
+      if (!type || (type !== 'screen' && type !== 'webcam')) {
+        throw new Error('Invalid recording type. Must be "screen" or "webcam"')
+      }
+
+      await recordingService.startRecording({ type })
+      
+      // Listen for recording events
+      recordingService.on('started', (data: any) => {
+        console.log('[IPC] Recording started:', data.outputPath)
+      })
+
+      recordingService.on('stopped', (data: any) => {
+        console.log('[IPC] Recording stopped:', data)
+        
+        // Send to renderer
+        const mainWindow = BrowserWindow.fromWebContents(event.sender)
+        if (mainWindow) {
+          mainWindow.webContents.send('recording:completed', data.path, data.metadata)
+        }
+      })
+
+      return { success: true }
+    } catch (error: any) {
+      console.error('[IPC] Start recording failed:', error)
+      throw error
+    }
   })
 
-  // stopRecording - Stop active recording (placeholder for PR 11)
-  ipcMain.handle('stopRecording', async () => {
+  // stopRecording - Stop active recording
+  ipcMain.handle('stopRecording', async (event) => {
     console.log('[IPC] stopRecording called')
     
-    // Will be implemented in PR 11
-    return { success: true }
+    try {
+      const result = await recordingService.stopRecording()
+      
+      // Send completion event to renderer
+      const mainWindow = BrowserWindow.fromWebContents(event.sender)
+      if (mainWindow) {
+        mainWindow.webContents.send('recording:completed', result.path, result.metadata)
+      }
+      
+      return result
+    } catch (error: any) {
+      console.error('[IPC] Stop recording failed:', error)
+      throw error
+    }
   })
 
   console.log('[IPC] All handlers registered successfully')
