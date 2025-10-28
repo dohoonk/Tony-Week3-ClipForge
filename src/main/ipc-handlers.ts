@@ -2,8 +2,10 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { ffmpegWrapper } from './ffmpeg-wrapper'
 import { projectIO } from './project-io'
 import { recordingService } from './recording-service'
+import { fileIngestService } from './file-ingest-service'
 import os from 'os'
 import fs from 'fs'
+import path from 'path'
 
 // Type definitions for IPC handlers
 type Clip = {
@@ -37,7 +39,7 @@ type Project = {
 // These will be implemented with actual functionality in later PRs
 
 export function setupIpcHandlers() {
-  // openFiles - Show file dialog and return selected paths
+  // openFiles - Show file dialog, ingest files, and return new paths
   ipcMain.handle('openFiles', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
@@ -51,7 +53,19 @@ export function setupIpcHandlers() {
       return []
     }
 
-    return result.filePaths
+    // Ingest files: copy to ~/.clipforge/clips/ with UUID filenames
+    const ingestedPaths: string[] = []
+    for (const originalPath of result.filePaths) {
+      try {
+        const newPath = fileIngestService.ingestFile(originalPath)
+        ingestedPaths.push(newPath)
+      } catch (error) {
+        console.error(`[IPC] Failed to ingest file ${originalPath}:`, error)
+        // Continue with other files
+      }
+    }
+
+    return ingestedPaths
   })
 
   // probe - Extract metadata from video file using FFprobe
@@ -191,16 +205,32 @@ export function setupIpcHandlers() {
     
     try {
       const result = await recordingService.stopRecording()
-      
-      // Send completion event to renderer
-      const mainWindow = BrowserWindow.fromWebContents(event.sender)
-      if (mainWindow) {
-        mainWindow.webContents.send('recording:completed', result.path, result.metadata)
-      }
-      
       return result
     } catch (error: any) {
       console.error('[IPC] Stop recording failed:', error)
+      throw error
+    }
+  })
+
+  // saveRecording - Save recording data from renderer
+  ipcMain.handle('saveRecording', async (event, uint8Array: Uint8Array, outputPath: string) => {
+    console.log('[IPC] saveRecording called:', outputPath)
+    
+    try {
+      // Ensure output directory exists
+      const outputDir = path.dirname(outputPath)
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true })
+      }
+      
+      // Convert Uint8Array to Buffer and write to file
+      const buffer = Buffer.from(uint8Array)
+      fs.writeFileSync(outputPath, buffer)
+      
+      console.log(`[IPC] Recording saved: ${outputPath} (${buffer.length} bytes)`)
+      return { success: true, path: outputPath }
+    } catch (error: any) {
+      console.error('[IPC] Save recording failed:', error)
       throw error
     }
   })

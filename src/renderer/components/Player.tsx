@@ -12,8 +12,8 @@ export function Player() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingType, setRecordingType] = useState<'screen' | 'webcam'>('screen')
 
-  // Get the currently playing clip path
-  const getCurrentVideoPath = () => {
+  // Get the currently playing clip path and duration
+  const getCurrentVideoInfo = () => {
     // TODO: Get from selected track item
     const availableClips = Object.values(clips).filter(clip => {
       // Skip mock recordings that don't exist yet
@@ -25,14 +25,15 @@ export function Player() {
     
     const firstClip = availableClips[0]
     if (firstClip) {
-      // Electron can handle local file paths directly
-      // No need for file:// protocol prefix
-      return firstClip.path
+      return {
+        path: firstClip.path,
+        duration: firstClip.duration
+      }
     }
-    return undefined
+    return { path: undefined, duration: 0 }
   }
 
-  const currentVideoPath = getCurrentVideoPath()
+  const { path: currentVideoPath, duration: currentVideoDuration } = getCurrentVideoInfo()
   
   // Convert absolute path to file:// URL for HTML5 video
   const videoSrc = currentVideoPath ? `file://${currentVideoPath}` : undefined
@@ -53,6 +54,61 @@ export function Player() {
 
     const handleLoadedMetadata = () => {
       console.log('[Player] Video metadata loaded, duration:', video.duration)
+      
+      // Handle Chrome's MediaRecorder duration bug for WebM files
+      if (video.duration === Infinity) {
+        console.log('[Player] Duration is Infinity, applying Chrome MediaRecorder workaround')
+        try {
+          // Set currentTime to a large but finite value to force duration calculation
+          video.currentTime = 1e6  // 1 million seconds (about 11.5 days)
+          video.addEventListener('timeupdate', () => {
+            console.log('[Player] After workaround, duration:', video.duration)
+            video.currentTime = 0
+            
+            // Update clip duration if this is a recording
+            if (videoSrc && videoSrc.includes('/recordings/')) {
+              const clips = useStore.getState().clips
+              const currentClip = Object.values(clips).find(clip => clip.path === videoSrc.replace('file://', ''))
+              if (currentClip && video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 0) {
+                console.log('[Player] Updating clip duration with actual video duration:', video.duration)
+                useStore.getState().updateClipDuration(currentClip.id, video.duration)
+              }
+            }
+          }, { once: true })
+        } catch (error) {
+          console.error('[Player] Failed to apply duration workaround:', error)
+          // Fallback: try with a smaller value
+          try {
+            video.currentTime = 100000  // 100,000 seconds (about 27 hours)
+            video.addEventListener('timeupdate', () => {
+              console.log('[Player] After fallback workaround, duration:', video.duration)
+              video.currentTime = 0
+              
+              // Update clip duration if this is a recording
+              if (videoSrc && videoSrc.includes('/recordings/')) {
+                const clips = useStore.getState().clips
+                const currentClip = Object.values(clips).find(clip => clip.path === videoSrc.replace('file://', ''))
+                if (currentClip && video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 0) {
+                  console.log('[Player] Updating clip duration with actual video duration:', video.duration)
+                  useStore.getState().updateClipDuration(currentClip.id, video.duration)
+                }
+              }
+            }, { once: true })
+          } catch (fallbackError) {
+            console.error('[Player] Fallback workaround also failed:', fallbackError)
+          }
+        }
+      } else {
+        // Normal case - duration is available
+        if (videoSrc && videoSrc.includes('/recordings/')) {
+          const clips = useStore.getState().clips
+          const currentClip = Object.values(clips).find(clip => clip.path === videoSrc.replace('file://', ''))
+          if (currentClip && video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 0) {
+            console.log('[Player] Updating clip duration with actual video duration:', video.duration)
+            useStore.getState().updateClipDuration(currentClip.id, video.duration)
+          }
+        }
+      }
     }
 
     video.addEventListener('error', handleError)
@@ -110,11 +166,12 @@ export function Player() {
         const fileName = path.split('/').pop() || `recording_${Date.now()}.webm`
         
         // Create clip object with fallback values
+        // For WebM recordings, we'll update the duration after the video loads
         const clip = {
           id: `clip-${Date.now()}-${Math.random()}`,
           name: fileName,
           path: path,
-          duration: fullMetadata.duration || metadata.duration || 0,
+          duration: metadata.duration || fullMetadata.duration || 0, // Temporary duration
           width: fullMetadata.width || metadata.width || 1920,
           height: fullMetadata.height || metadata.height || 1080,
         }
@@ -315,7 +372,7 @@ export function Player() {
         
         {/* Time Display */}
         <div className="mt-3 text-center text-sm text-gray-400">
-          {(playheadSec || 0).toFixed(1)}s / {currentVideoPath ? '78.5s' : '0.0s'}
+          {isNaN(playheadSec || 0) ? '0.0' : (playheadSec || 0).toFixed(1)}s / {currentVideoDuration > 0 && !isNaN(currentVideoDuration) && isFinite(currentVideoDuration) ? currentVideoDuration.toFixed(1) + 's' : '0.0s'}
         </div>
       </div>
     </div>

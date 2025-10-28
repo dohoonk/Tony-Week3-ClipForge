@@ -67,6 +67,14 @@ export class FFmpegWrapper extends EventEmitter {
    */
   async probe(filePath: string): Promise<{ duration: number; width: number; height: number }> {
     return new Promise((resolve, reject) => {
+      // Check if file exists first
+      if (!existsSync(filePath)) {
+        reject(new Error(`File does not exist: ${filePath}`))
+        return
+      }
+
+      console.log(`[FFmpeg] Probing file: ${filePath}`)
+      
       ffmpeg(filePath)
         .ffprobe((err, metadata) => {
           if (err) {
@@ -75,14 +83,51 @@ export class FFmpegWrapper extends EventEmitter {
             return
           }
 
+          console.log('[FFmpeg] Raw metadata:', JSON.stringify(metadata, null, 2))
+
           const videoStream = metadata.streams?.find(s => s.codec_type === 'video')
           if (!videoStream) {
             reject(new Error('No video stream found'))
             return
           }
 
+          const duration = Number(metadata.format.duration || videoStream.duration || 0)
+          console.log(`[FFmpeg] Extracted duration: ${duration}`)
+          console.log(`[FFmpeg] Format duration: ${metadata.format.duration}`)
+          console.log(`[FFmpeg] Stream duration: ${videoStream.duration}`)
+          console.log(`[FFmpeg] File size: ${metadata.format.size} bytes`)
+
+          // If duration is still NaN or 0, use fallback estimation
+          let finalDuration = duration
+          if (isNaN(duration) || duration === 0) {
+            console.log('[FFmpeg] Duration is NaN, using fallback estimation...')
+            
+            // Try multiple estimation methods
+            const fileSize = metadata.format.size || 0
+            console.log(`[FFmpeg] File size: ${fileSize} bytes`)
+            
+            // Method 1: Estimate from bitrate (this is what we're using)
+            const estimatedBitrate = 2000000 // 2 Mbps estimate
+            const method1Duration = fileSize * 8 / estimatedBitrate
+            console.log(`[FFmpeg] Method 1 (2Mbps): ${method1Duration}s`)
+            
+            // Method 2: Try different bitrates
+            const method2Duration = fileSize * 8 / 1000000 // 1 Mbps
+            console.log(`[FFmpeg] Method 2 (1Mbps): ${method2Duration}s`)
+            
+            const method3Duration = fileSize * 8 / 5000000 // 5 Mbps
+            console.log(`[FFmpeg] Method 3 (5Mbps): ${method3Duration}s`)
+            
+            // Method 4: Try to calculate from frame rate if available
+            const frameRate = videoStream.r_frame_rate
+            console.log(`[FFmpeg] Frame rate: ${frameRate}`)
+            
+            finalDuration = method1Duration
+            console.log(`[FFmpeg] Using fallback duration: ${finalDuration}s`)
+          }
+
           resolve({
-            duration: metadata.format.duration || 0,
+            duration: finalDuration,
             width: videoStream.width || 0,
             height: videoStream.height || 0,
           })

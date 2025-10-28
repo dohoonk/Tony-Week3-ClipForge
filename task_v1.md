@@ -64,10 +64,10 @@
 - [x] Include width and height in persisted clip schema
 
 ### PR 5b: backend/file-ingest-service
-- [ ] On import, copy file to ~/.clipforge/clips/
-- [ ] Normalize filenames (uuidv4 + extension)
-- [ ] Update project JSON path to new global URI
-- [ ] Log result for debugging
+- [x] On import, copy file to ~/.clipforge/clips/
+- [x] Normalize filenames (uuidv4 + extension)
+- [x] Update project JSON path to new global URI
+- [x] Log result for debugging
 
 ---
 

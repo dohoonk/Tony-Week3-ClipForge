@@ -6,6 +6,7 @@ interface ClipForgeActions {
   addClip: (clip: Clip) => void
   removeClip: (clipId: string) => void
   updateClip: (clipId: string, updates: Partial<Clip>) => void
+  updateClipDuration: (clipId: string, duration: number) => void
   
   // TrackItem actions
   addTrackItem: (item: any) => void
@@ -50,6 +51,10 @@ export const useStore = create<ClipForgeStore>((set) => ({
   
   updateClip: (clipId: string, updates: Partial<Clip>) => set((state) => ({
     clips: { ...state.clips, [clipId]: { ...state.clips[clipId], ...updates } }
+  })),
+  
+  updateClipDuration: (clipId: string, duration: number) => set((state) => ({
+    clips: { ...state.clips, [clipId]: { ...state.clips[clipId], duration } }
   })),
   
   addTrackItem: (item: any) => set((state) => ({
