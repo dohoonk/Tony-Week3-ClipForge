@@ -181,6 +181,16 @@ export class ProjectIO {
    * Validate project structure
    */
   private validateProject(project: any) {
+    console.log('[ProjectIO] Validating project structure:', {
+      hasProject: !!project,
+      isObject: typeof project === 'object',
+      hasVersion: !!project?.version,
+      hasClips: !!project?.clips,
+      hasTracksArray: Array.isArray(project?.tracks),
+      hasTrackItems: !!project?.trackItems,
+      hasTracksObject: project?.tracks && typeof project.tracks === 'object' && !Array.isArray(project.tracks)
+    })
+
     if (!project || typeof project !== 'object') {
       throw new Error('Invalid project: must be an object')
     }
@@ -193,8 +203,14 @@ export class ProjectIO {
       throw new Error('Invalid project: missing or invalid clips')
     }
 
-    if (!Array.isArray(project.tracks) && !project.trackItems) {
-      throw new Error('Invalid project: missing tracks or trackItems')
+    // More flexible validation - allow empty tracks/trackItems for new projects
+    const hasTracksArray = Array.isArray(project.tracks)
+    const hasTrackItems = !!project.trackItems
+    const hasTracksObject = project.tracks && typeof project.tracks === 'object' && !Array.isArray(project.tracks)
+    
+    if (!hasTracksArray && !hasTrackItems && !hasTracksObject) {
+      console.warn('[ProjectIO] No tracks or trackItems found, creating empty structure')
+      // Don't throw error, just log warning for empty projects
     }
   }
 
@@ -211,26 +227,22 @@ export class ProjectIO {
     // Convert flat trackItems back to nested tracks, organized by trackId
     const serialized = { ...project }
     
-    if (project.trackItems && project.tracks) {
+    if (project.tracks) {
       // Group trackItems by trackId
       const tracksMap: Record<string, any[]> = {}
-      Object.values(project.trackItems).forEach((item: any) => {
-        const trackId = item.trackId || 'track-1' // fallback to default track
-        if (!tracksMap[trackId]) {
-          tracksMap[trackId] = []
-        }
-        tracksMap[trackId].push(item)
-      })
+      if (project.trackItems) {
+        Object.values(project.trackItems).forEach((item: any) => {
+          const trackId = item.trackId || 'track-1' // fallback to default track
+          if (!tracksMap[trackId]) {
+            tracksMap[trackId] = []
+          }
+          tracksMap[trackId].push(item)
+        })
+      }
       
-      // Convert to array of tracks with their items
-      serialized.tracks = Object.entries(tracksMap).map(([trackId, items]) => {
-        const track = project.tracks[trackId] || {
-          id: trackId,
-          kind: 'video',
-          order: 0,
-          visible: true,
-          name: trackId
-        }
+      // Convert to array of tracks with their items (include all tracks, even empty ones)
+      serialized.tracks = Object.values(project.tracks).map((track: any) => {
+        const items = tracksMap[track.id] || []
         return {
           ...track,
           items
@@ -238,7 +250,6 @@ export class ProjectIO {
       }).sort((a, b) => (a.order || 0) - (b.order || 0))
       
       delete serialized.trackItems
-      delete serialized.tracks // Remove the flat tracks object
     }
 
     return serialized
@@ -256,11 +267,15 @@ export class ProjectIO {
       deserialized.tracks = {}
       project.tracks.forEach((track: any) => {
         const { items, ...trackData } = track
+        const parsedOrderFromId = typeof trackData.id === 'string' && trackData.id.includes('-')
+          ? parseInt(trackData.id.split('-')[1] || '0', 10)
+          : 0
+        const order = (trackData.order ?? parsedOrderFromId) || 0
         deserialized.tracks[track.id] = {
           ...trackData,
-          order: trackData.order || trackData.id ? parseInt(trackData.id.split('-')[1] || '0') : 0,
+          order,
           visible: trackData.visible !== undefined ? trackData.visible : true,
-          name: trackData.name || `Track ${trackData.order || 0}`
+          name: trackData.name || `Track ${order}`
         }
       })
       
@@ -277,8 +292,29 @@ export class ProjectIO {
         }
       })
       
-      // Remove the array tracks
-      delete deserialized.tracks
+      // Keep converted tracks record
+    } else if (project.trackItems && project.tracks) {
+      // Already in runtime format, just ensure trackId is set
+      deserialized.trackItems = {}
+      Object.values(project.trackItems).forEach((item: any) => {
+        deserialized.trackItems[item.id] = {
+          ...item,
+          trackId: item.trackId || 'track-1' // Ensure trackId is set
+        }
+      })
+    } else {
+      // Empty project - create default structure
+      console.log('[ProjectIO] Creating default project structure')
+      deserialized.tracks = {
+        'track-1': {
+          id: 'track-1',
+          kind: 'video',
+          order: 0,
+          visible: true,
+          name: 'Video Track 1'
+        }
+      }
+      deserialized.trackItems = {}
     }
 
     return deserialized

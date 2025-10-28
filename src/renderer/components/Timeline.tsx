@@ -16,6 +16,7 @@ export function Timeline() {
   const setZoom = store.setZoom
   
   const [dragOver, setDragOver] = useState(false)
+  const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null)
   const [scrollLeft, setScrollLeft] = useState(0)
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -33,16 +34,30 @@ export function Timeline() {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(true)
+    
+    // Calculate which track is being hovered
+    const rect = timelineRef.current?.getBoundingClientRect()
+    if (rect) {
+      const mouseY = e.clientY - rect.top
+      const scrollTop = scrollContainerRef.current?.scrollTop || 0
+      const totalY = mouseY + scrollTop
+      const trackIndex = Math.floor(totalY / TRACK_HEIGHT)
+      const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+      const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
+      setHoveredTrackIndex(clampedIndex)
+    }
   }
 
   const handleDragLeave = () => {
     setDragOver(false)
+    setHoveredTrackIndex(null)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(false)
+    setHoveredTrackIndex(null)
 
     console.log('[Timeline] Drop event triggered')
 
@@ -62,9 +77,32 @@ export function Timeline() {
     }
 
     const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
     const dropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
 
-    console.log('[Timeline] Drop at:', dropTime, 'seconds')
+    console.log('[Timeline] Drop at:', dropTime, 'seconds, y:', mouseY)
+    console.log('[Timeline] Scroll top:', scrollContainerRef.current?.scrollTop)
+
+    // Calculate which track based on Y position
+    // The Y position is relative to the timeline container
+    const scrollTop = scrollContainerRef.current?.scrollTop || 0
+    const totalY = mouseY + scrollTop
+    
+    console.log('[Timeline] Total Y (mouseY + scrollTop):', totalY)
+    
+    // Calculate track index - each track is TRACK_HEIGHT pixels
+    const trackIndex = Math.floor(totalY / TRACK_HEIGHT)
+    const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+    
+    // Clamp track index to valid range
+    const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
+    
+    console.log('[Timeline] Calculated track index:', trackIndex, '→ clamped:', clampedIndex)
+    console.log('[Timeline] Available tracks:', sortedTracks.length, sortedTracks.map(t => t.name))
+    
+    const targetTrack = sortedTracks[clampedIndex]
+    
+    console.log('[Timeline] Target track:', targetTrack, 'index:', clampedIndex)
 
     // Get clip from store to use actual duration
     const clip = store.clips[clipId]
@@ -74,7 +112,7 @@ export function Timeline() {
     const trackItem = {
       id: `trackitem-${Date.now()}-${Math.random()}`,
       clipId,
-      trackId: 'track-1', // Default track for now
+      trackId: targetTrack.id,
       inSec: 0, // TODO: get from UI trim controls
       outSec: clipDuration,
       trackPosition: dropTime,
@@ -118,6 +156,79 @@ export function Timeline() {
     }
     removeTrack(trackId)
     console.log('[Timeline] Removed track:', trackId)
+  }
+
+  // Project management functions
+  const handleSaveProject = async () => {
+    try {
+      const project = {
+        ...store.project,
+        clips: store.clips,
+        tracks: store.tracks,
+        trackItems: store.trackItems
+      }
+      const savedPath = await window.clipforge.saveProject(project)
+      console.log('[Timeline] Project saved to:', savedPath)
+      alert(`Project saved to: ${savedPath}`)
+    } catch (error) {
+      console.error('[Timeline] Save failed:', error)
+      alert('Failed to save project: ' + error.message)
+    }
+  }
+
+  const handleLoadProject = async () => {
+    try {
+      const project = await window.clipforge.openProject()
+      if (project) {
+        console.log('[Timeline] Project loaded:', project)
+        
+        // Clear existing data - remove tracks first (this removes their items too)
+        Object.keys(store.tracks).forEach(trackId => store.removeTrack(trackId))
+        // Remove any remaining track items (shouldn't be any after removing tracks)
+        Object.keys(store.trackItems).forEach(itemId => store.removeTrackItem(itemId))
+        // Remove clips
+        Object.keys(store.clips).forEach(clipId => store.removeClip(clipId))
+        
+        // Add loaded clips
+        Object.values(project.clips || {}).forEach((clip: any) => {
+          store.addClip(clip)
+        })
+        
+        // Add loaded tracks
+        console.log('[Timeline] Adding tracks:', project.tracks)
+        const loadedTracks = Object.values(project.tracks || {})
+        if (loadedTracks.length > 0) {
+          loadedTracks.forEach((track: any) => {
+            console.log('[Timeline] Adding track:', track)
+            store.addTrack(track)
+          })
+        } else {
+          // If no tracks in project, ensure we have at least one default track
+          console.log('[Timeline] No tracks in project, creating default track')
+          const defaultTrack = {
+            id: 'track-1',
+            kind: 'video',
+            order: 0,
+            visible: true,
+            name: 'Video Track 1'
+          }
+          store.addTrack(defaultTrack)
+        }
+        
+        // Add loaded track items
+        console.log('[Timeline] Adding track items:', project.trackItems)
+        Object.values(project.trackItems || {}).forEach((item: any) => {
+          console.log('[Timeline] Adding track item:', item)
+          store.addTrackItem(item)
+        })
+        
+        console.log('[Timeline] Store updated with loaded project')
+        alert('Project loaded successfully')
+      }
+    } catch (error) {
+      console.error('[Timeline] Load failed:', error)
+      alert('Failed to load project: ' + error.message)
+    }
   }
 
   const handlePlayheadClick = (e: React.MouseEvent) => {
@@ -212,6 +323,18 @@ export function Timeline() {
           <h2 className="text-lg font-semibold text-white">Timeline</h2>
           <div className="flex items-center gap-3">
             <button
+              onClick={handleSaveProject}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded font-medium"
+            >
+              💾 Save Project
+            </button>
+            <button
+              onClick={handleLoadProject}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded font-medium"
+            >
+              📁 Load Project
+            </button>
+            <button
               onClick={handlePlayPause}
               className={`px-3 py-1 rounded text-sm font-medium ${
                 isPlaying 
@@ -236,24 +359,38 @@ export function Timeline() {
             + Add Track
           </button>
           <div className="flex items-center gap-2 flex-wrap">
-            {Object.values(tracks)
-              .sort((a, b) => a.order - b.order)
-              .map(track => (
-                <div
-                  key={track.id}
-                  className="flex items-center gap-2 px-2 py-1 bg-gray-700 rounded text-sm"
-                >
-                  <span className="text-gray-300">{track.name}</span>
-                  <button
-                    onClick={() => handleRemoveTrack(track.id)}
-                    className="text-red-400 hover:text-red-300 text-xs"
-                    title="Delete track"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))
-            }
+                {Object.values(tracks)
+                  .sort((a, b) => a.order - b.order)
+                  .map(track => (
+                    <div
+                      key={track.id}
+                      className="flex items-center gap-2 px-2 py-1 bg-gray-700 rounded text-sm"
+                    >
+                      <span className="text-gray-300">{track.name}</span>
+                      <button
+                        onClick={() => store.moveTrackUp(track.id)}
+                        className="text-gray-300 hover:text-white text-xs"
+                        title="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => store.moveTrackDown(track.id)}
+                        className="text-gray-300 hover:text-white text-xs"
+                        title="Move down"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => handleRemoveTrack(track.id)}
+                        className="text-red-400 hover:text-red-300 text-xs"
+                        title="Delete track"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                }
           </div>
         </div>
         
@@ -317,14 +454,16 @@ export function Timeline() {
           {/* Render each track */}
           {Object.values(tracks)
             .sort((a, b) => a.order - b.order)
-            .map((track) => {
-              const trackItems = Object.values(trackItems).filter(item => item.trackId === track.id)
+            .map((track, index) => {
+              // Get track items for this specific track
+              const itemsForThisTrack = Object.values(trackItems).filter(item => item.trackId === track.id)
               const trackTop = track.order * TRACK_HEIGHT
+              const isHovered = hoveredTrackIndex === index
               
               return (
                 <div
                   key={track.id}
-                  className="relative border-b border-gray-700"
+                  className={`relative border-b border-gray-700 ${isHovered ? 'bg-blue-900 bg-opacity-20' : ''}`}
                   style={{
                     top: `${trackTop}px`,
                     width: `${timelineWidth}px`,
@@ -332,8 +471,10 @@ export function Timeline() {
                   }}
                 >
                   {/* Track label */}
-                  <div className="absolute left-0 top-0 w-32 h-full bg-gray-800 border-r border-gray-700 flex items-center px-2 z-10">
-                    <span className="text-xs text-gray-300 truncate">{track.name}</span>
+                  <div className={`absolute left-0 top-0 w-32 h-full border-r border-gray-700 flex items-center px-2 z-10 ${isHovered ? 'bg-blue-800' : 'bg-gray-800'}`}>
+                    <span className={`text-xs truncate ${isHovered ? 'text-blue-200' : 'text-gray-300'}`}>
+                      {isHovered ? `Drop on ${track.name}` : track.name}
+                    </span>
                   </div>
                   
                   {/* Playhead indicator for this track */}
@@ -367,7 +508,7 @@ export function Timeline() {
                   </div>
                   
                   {/* Track items */}
-                  {trackItems.map((item) => {
+                  {itemsForThisTrack.map((item) => {
                     const clip = store.clips[item.clipId]
                     const itemDuration = (item.outSec - item.inSec) || 10
                     const itemWidth = itemDuration * pixelsPerSecond

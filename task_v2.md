@@ -42,12 +42,12 @@
 ## 🎬 Multi-Track Timeline
 
 ### PR 21: multi-track-foundation
-- [ ] Add trackId field to TrackItem type definition
-- [ ] Add tracks metadata to Zustand store (order, kind, visible)
-- [ ] Implement track ordering system (move up/down)
-- [ ] Add track creation/deletion UI (timeline header)
-- [ ] Update timeline rendering for multiple track rows
-- [ ] Ensure all serialization includes trackId
+- [x] Add trackId field to TrackItem type definition
+- [x] Add tracks metadata to Zustand store (order, kind, visible)
+- [x] Implement track ordering system (move up/down)
+- [x] Add track creation/deletion UI (timeline header)
+- [x] Update timeline rendering for multiple track rows
+- [x] Ensure all serialization includes trackId
 
 ### PR 22: track-interactions
 - [ ] Enable drag-drop across tracks
