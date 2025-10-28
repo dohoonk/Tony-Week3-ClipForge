@@ -31,9 +31,9 @@
 - [x] Handle permissions and device selection ✅
 
 ### PR 20: pip-recording-system
-- [ ] Implement simultaneous screen + webcam capture
-- [ ] Add FFmpeg overlay filter for PiP
-- [ ] Create live PiP preview (pre-record)
+- [x] Implement simultaneous screen + webcam capture
+- [x] Add FFmpeg overlay filter for PiP
+- [x] Create live PiP preview (pre-record)
 - [ ] Handle stream synchronization
 - [ ] Optimize CPU usage for dual capture
 

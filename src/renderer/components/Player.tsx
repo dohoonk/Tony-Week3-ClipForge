@@ -1,6 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { useStore } from '../store'
 
+declare global {
+  interface Window {
+    // Preload-exposed API
+    clipforge: any
+  }
+}
+
 export function Player() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const store = useStore()
@@ -20,6 +27,8 @@ export function Player() {
   const [recordingTimer, setRecordingTimer] = useState<NodeJS.Timeout | null>(null)
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null)
   const [webcamPreviewRef, setWebcamPreviewRef] = useState<HTMLVideoElement | null>(null)
+  const [screenPreviewStream, setScreenPreviewStream] = useState<MediaStream | null>(null)
+  const screenPreviewRef = useRef<HTMLVideoElement>(null)
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedCameraId, setSelectedCameraId] = useState<string>('')
@@ -236,8 +245,8 @@ export function Player() {
   }, [])
 
   const handlePlay = () => {
-    // If webcam preview is visible and we're not recording, stop it to show main video
-    if (webcamStream && !isRecording && countdown === null) {
+    // Only auto-switch out of preview when in webcam-only mode
+    if (recordingType === 'webcam' && webcamStream && !isRecording && countdown === null) {
       stopWebcamPreview()
       setRecordingType('screen')
     }
@@ -319,6 +328,14 @@ export function Player() {
       if (isCurrentlyRecording) {
         console.log('[Player] Recording still active, skipping start')
         return
+      }
+
+      // Stop previews to avoid device contention when recording starts
+      if (recordingType === 'webcam' || recordingType === 'pip') {
+        stopWebcamPreview()
+      }
+      if (recordingType === 'pip') {
+        stopScreenPreview()
       }
 
       setIsRecording(true)
@@ -473,6 +490,51 @@ export function Player() {
     }
   }
 
+  // Screen preview (for PiP pre-record)
+  const startScreenPreview = async () => {
+    try {
+      console.log('[Player] Starting screen preview')
+      const sources = await window.clipforge.getScreenSources()
+      if (!sources || sources.length === 0) {
+        throw new Error('No screen sources available')
+      }
+      const primary = sources[0]
+
+      // Use chromeMediaSource constraints (Electron)
+      const constraints: any = {
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: primary.id,
+            minWidth: 1280,
+            maxWidth: 1920,
+            minHeight: 720,
+            maxHeight: 1080
+          }
+        }
+      }
+
+      const stream = await (navigator.mediaDevices as any).getUserMedia(constraints)
+      setScreenPreviewStream(stream)
+      console.log('[Player] Screen preview started')
+    } catch (error) {
+      console.error('[Player] Failed to start screen preview:', error)
+      setScreenPreviewStream(null)
+    }
+  }
+
+  const stopScreenPreview = () => {
+    if (screenPreviewStream) {
+      screenPreviewStream.getTracks().forEach(track => track.stop())
+      setScreenPreviewStream(null)
+      if (screenPreviewRef.current) {
+        screenPreviewRef.current.srcObject = null
+      }
+      console.log('[Player] Screen preview stopped')
+    }
+  }
+
   // Handle recording type change
   const handleRecordingTypeChange = async (newType: 'screen' | 'webcam' | 'pip') => {
     setRecordingType(newType)
@@ -485,13 +547,15 @@ export function Player() {
     }
     
     if (newType === 'webcam') {
+      stopScreenPreview()
       startWebcamPreview()
     } else if (newType === 'pip') {
-      // For PiP, we'll start webcam preview for now
-      // TODO: Implement live PiP preview
+      // For MVP PiP preview: webcam only
+      stopScreenPreview()
       startWebcamPreview()
     } else {
       stopWebcamPreview()
+      stopScreenPreview()
     }
   }
 
@@ -502,6 +566,14 @@ export function Player() {
       console.log('[Player] Set webcam stream to preview element')
     }
   }, [webcamPreviewRef, webcamStream])
+
+  // Set screen stream to preview element when available
+  useEffect(() => {
+    if (screenPreviewRef.current && screenPreviewStream) {
+      screenPreviewRef.current.srcObject = screenPreviewStream
+      console.log('[Player] Set screen stream to preview element')
+    }
+  }, [screenPreviewStream])
 
   // Cleanup countdown interval on unmount
   useEffect(() => {
@@ -515,8 +587,11 @@ export function Player() {
       if (webcamStream) {
         webcamStream.getTracks().forEach(track => track.stop())
       }
+      if (screenPreviewStream) {
+        screenPreviewStream.getTracks().forEach(track => track.stop())
+      }
     }
-  }, [countdownInterval, recordingTimer, webcamStream])
+  }, [countdownInterval, recordingTimer, webcamStream, screenPreviewStream])
 
   // Sync playhead with video timeupdate (throttled to ~30fps)
   useEffect(() => {
@@ -590,6 +665,15 @@ export function Player() {
       {/* Video Player */}
       <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ height: '280px', width: '100%' }}>
         {recordingType === 'webcam' && webcamStream ? (
+          <video
+            ref={setWebcamPreviewRef}
+            className="w-full h-full object-cover"
+            autoPlay
+            muted
+            playsInline
+          />
+        ) : recordingType === 'pip' && webcamStream ? (
+          // MVP: show webcam only for PiP preview
           <video
             ref={setWebcamPreviewRef}
             className="w-full h-full object-cover"
