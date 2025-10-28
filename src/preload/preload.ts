@@ -1,10 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+// Secure IPC API surface for ClipForge
 contextBridge.exposeInMainWorld('clipforge', {
-  // Placeholder IPC methods - will be implemented in PR 3
+  // File operations
   openFiles: () => ipcRenderer.invoke('openFiles'),
   probe: (path: string) => ipcRenderer.invoke('probe', path),
+  
+  // Project operations
+  saveProject: (project: any, path?: string) => 
+    ipcRenderer.invoke('saveProject', project, path),
+  openProject: () => ipcRenderer.invoke('openProject'),
+  
+  // Export operations
+  exportTimeline: (project: any, outPath: string) => 
+    ipcRenderer.invoke('exportTimeline', project, outPath),
+  
+  // Recording operations
+  startRecording: (options: any) => 
+    ipcRenderer.invoke('startRecording', options),
+  stopRecording: () => ipcRenderer.invoke('stopRecording'),
+  
+  // Event listeners
+  onRecordingComplete: (callback: (path: string, metadata: any) => void) => {
+    ipcRenderer.on('recording:completed', (_event, path: string, metadata: any) => 
+      callback(path, metadata)
+    )
+  },
 })
 

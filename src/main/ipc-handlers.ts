@@ -1,0 +1,131 @@
+import { ipcMain, dialog } from 'electron'
+
+// Type definitions for IPC handlers
+type Clip = {
+  id: string
+  name: string
+  path: string
+  duration: number
+  width: number
+  height: number
+}
+
+type TrackItem = {
+  id: string
+  clipId: string
+  inSec: number
+  outSec: number
+  trackPosition: number
+}
+
+type Project = {
+  id: string
+  name: string
+  version: string
+  clips: Record<string, Clip>
+  tracks: any[]
+  createdAt: string
+  updatedAt: string
+}
+
+// IPC Handlers for PR 3
+// These will be implemented with actual functionality in later PRs
+
+export function setupIpcHandlers() {
+  // openFiles - Show file dialog and return selected paths
+  ipcMain.handle('openFiles', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Video Files', extensions: ['mp4', 'mov', 'webm'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    })
+
+    if (result.canceled) {
+      return []
+    }
+
+    return result.filePaths
+  })
+
+  // probe - Extract metadata from video file (placeholder for PR 4)
+  ipcMain.handle('probe', async (_event, path: string) => {
+    // Input validation
+    if (!path || typeof path !== 'string') {
+      throw new Error('Invalid path: path must be a non-empty string')
+    }
+
+    // Path sanitization - basic check for relative paths
+    if (path.includes('..')) {
+      throw new Error('Invalid path: directory traversal not allowed')
+    }
+
+    // Placeholder implementation
+    console.log(`[IPC] probe called for path: ${path}`)
+    
+    // Will be implemented in PR 4 with FFprobe
+    return {
+      duration: 0,
+      width: 0,
+      height: 0,
+    }
+  })
+
+  // exportTimeline - Export project to MP4 (placeholder for PR 12)
+  ipcMain.handle('exportTimeline', async (_event, project: Project, outPath: string) => {
+    // Input validation
+    if (!project || typeof project !== 'object') {
+      throw new Error('Invalid project: must be a valid project object')
+    }
+
+    if (!outPath || typeof outPath !== 'string') {
+      throw new Error('Invalid output path: must be a non-empty string')
+    }
+
+    console.log(`[IPC] exportTimeline called for: ${outPath}`)
+    
+    // Will be implemented in PR 12 with fluent-ffmpeg
+    return new Promise((resolve) => setTimeout(resolve, 100))
+  })
+
+  // saveProject - Save project JSON to disk (placeholder for PR 5)
+  ipcMain.handle('saveProject', async (_event, project: Project, path?: string) => {
+    // Input validation
+    if (!project || typeof project !== 'object') {
+      throw new Error('Invalid project: must be a valid project object')
+    }
+
+    console.log(`[IPC] saveProject called${path ? ` at: ${path}` : ''}`)
+    
+    // Will be implemented in PR 5 with file I/O
+    return path || '~/.clipforge/projects/default.json'
+  })
+
+  // openProject - Load project JSON from disk (placeholder for PR 5)
+  ipcMain.handle('openProject', async () => {
+    console.log('[IPC] openProject called')
+    
+    // Will be implemented in PR 5 with file I/O
+    return null
+  })
+
+  // startRecording - Begin screen/webcam recording (placeholder for PR 11)
+  ipcMain.handle('startRecording', async (_event, options: any) => {
+    console.log('[IPC] startRecording called with options:', options)
+    
+    // Will be implemented in PR 11
+    return { success: true }
+  })
+
+  // stopRecording - Stop active recording (placeholder for PR 11)
+  ipcMain.handle('stopRecording', async () => {
+    console.log('[IPC] stopRecording called')
+    
+    // Will be implemented in PR 11
+    return { success: true }
+  })
+
+  console.log('[IPC] All handlers registered successfully')
+}
+

@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { setupIpcHandlers } from './ipc-handlers'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -25,6 +26,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Setup IPC handlers before creating window
+  setupIpcHandlers()
+
   createWindow()
 
   app.on('activate', () => {

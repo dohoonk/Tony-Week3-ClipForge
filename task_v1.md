@@ -27,12 +27,12 @@
 ## 🔒 IPC Layer
 
 ### PR 3: ipc/secure-api-surface
-- [ ] Define IPC channels: openFiles, probe, exportTimeline, saveProject, openProject, startRecording, stopRecording
-- [ ] Implement input validation and path sanitization
-- [ ] Add preload bridge exposing window.clipforge.*
-- [ ] Add window.clipforge.onRecordingComplete() event binding
-- [ ] Confirm Renderer ↔ Preload ↔ Main communication
-- [ ] Write integration test with mocked FFmpeg
+- [x] Define IPC channels: openFiles, probe, exportTimeline, saveProject, openProject, startRecording, stopRecording
+- [x] Implement input validation and path sanitization
+- [x] Add preload bridge exposing window.clipforge.*
+- [x] Add window.clipforge.onRecordingComplete() event binding
+- [x] Confirm Renderer ↔ Preload ↔ Main communication
+- [ ] Write integration test with mocked FFmpeg (manual test completed, automated test pending)
 
 ---
 
