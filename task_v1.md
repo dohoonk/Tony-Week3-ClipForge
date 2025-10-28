@@ -74,14 +74,14 @@
 ## 📚 Media Import & Library
 
 ### PR 6: ui/media-library
-- [ ] Create Media Library panel (left column)
-- [ ] Hook "Import Files" → window.clipforge.openFiles()
-- [ ] Call probe() to retrieve { duration, width, height }
-- [ ] Store results in Zustand clips store
-- [ ] Display imported clips with filename + duration
-- [ ] Show gray placeholder (16:9) before thumbnails
-- [ ] When deleting clip, check if used in any trackItems
-- [ ] Show confirmation dialog before removal if referenced
+- [x] Create Media Library panel (left column)
+- [x] Hook "Import Files" → window.clipforge.openFiles()
+- [x] Call probe() to retrieve { duration, width, height }
+- [x] Store results in Zustand clips store
+- [x] Display imported clips with filename + duration
+- [x] Show gray placeholder (16:9) before thumbnails
+- [x] When deleting clip, check if used in any trackItems
+- [x] Show confirmation dialog before removal if referenced
 
 ---
 
