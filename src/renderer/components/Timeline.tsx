@@ -17,6 +17,7 @@ export function Timeline() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOver(true)
   }
 
@@ -26,14 +27,25 @@ export function Timeline() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOver(false)
 
+    console.log('[Timeline] Drop event triggered')
+
     const clipId = e.dataTransfer.getData('clipId')
-    if (!clipId) return
+    console.log('[Timeline] ClipId from drop:', clipId)
+    
+    if (!clipId) {
+      console.warn('[Timeline] No clipId in dataTransfer')
+      return
+    }
 
     // Get mouse position relative to timeline
     const rect = timelineRef.current?.getBoundingClientRect()
-    if (!rect) return
+    if (!rect) {
+      console.warn('[Timeline] No timeline ref')
+      return
+    }
 
     const mouseX = e.clientX - rect.left
     const dropTime = mouseX / PIXELS_PER_SECOND
@@ -42,13 +54,14 @@ export function Timeline() {
 
     // Create new track item
     const trackItem = {
-      id: `trackitem-${Date.now()}`,
+      id: `trackitem-${Date.now()}-${Math.random()}`,
       clipId,
       inSec: 0, // TODO: get from UI trim controls
-      outSec: 0, // TODO: get from clip.duration
+      outSec: 10, // TODO: get from clip.duration
       trackPosition: dropTime,
     }
 
+    console.log('[Timeline] Creating track item:', trackItem)
     addTrackItem(trackItem)
   }
 
@@ -93,6 +106,10 @@ export function Timeline() {
         ref={timelineRef}
         className="flex-1 relative bg-gray-900 overflow-hidden"
         onDragOver={handleDragOver}
+        onDragEnter={(e) => {
+          e.preventDefault()
+          console.log('[Timeline] Drag enter')
+        }}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={handlePlayheadClick}
@@ -109,7 +126,7 @@ export function Timeline() {
         <div className="absolute left-0 top-0 w-full" style={{ height: TRACK_HEIGHT }}>
           {/* Playhead indicator */}
           <div 
-            className="absolute w-0.5 bg-blue-500 z-10 transition-all"
+            className="absolute w-0.5 bg-blue-500 z-30 transition-all pointer-events-none"
             style={{ 
               left: `${playheadSec * PIXELS_PER_SECOND}px`,
               height: `${PLAYHEAD_HEIGHT}px`,
@@ -122,7 +139,7 @@ export function Timeline() {
           {sortedItems.map((item) => (
             <div
               key={item.id}
-              className="absolute bg-purple-600 border border-purple-400 cursor-pointer hover:bg-purple-500 transition-colors"
+              className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
               style={{
                 left: `${item.trackPosition * PIXELS_PER_SECOND}px`,
                 width: `${10 * PIXELS_PER_SECOND}px`, // Default 10 seconds width

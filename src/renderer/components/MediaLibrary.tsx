@@ -68,6 +68,9 @@ export function MediaLibrary() {
 
   const handleDragStart = (e: React.DragEvent, clipId: string) => {
     console.log('[MediaLibrary] Starting drag for clip:', clipId)
+    e.dataTransfer.setData('clipId', clipId)
+    e.dataTransfer.effectAllowed = 'copy'
+    console.log('[MediaLibrary] Set dataTransfer clipId:', clipId)
   }
 
   const formatDuration = (seconds: number): string => {
