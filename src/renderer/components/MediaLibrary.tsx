@@ -5,6 +5,7 @@ import { Clip } from '@shared/types'
 export function MediaLibrary() {
   const { clips, addClip, removeClip, trackItems } = useStore()
   const [isImporting, setIsImporting] = useState(false)
+  const { setSelectedId, selectedId } = useStore()
 
   const handleImportFiles = async () => {
     try {
@@ -65,6 +66,10 @@ export function MediaLibrary() {
     removeClip(clipId)
   }
 
+  const handleDragStart = (e: React.DragEvent, clipId: string) => {
+    console.log('[MediaLibrary] Starting drag for clip:', clipId)
+  }
+
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
@@ -100,10 +105,12 @@ export function MediaLibrary() {
           clipList.map((clip) => (
             <div
               key={clip.id}
-              className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors"
+              className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors group cursor-move"
+              draggable
+              onDragStart={(e) => handleDragStart(e, clip.id)}
             >
               {/* Thumbnail placeholder */}
-              <div className="aspect-video bg-gray-700 rounded mb-2 relative group">
+              <div className="aspect-video bg-gray-700 rounded mb-2 relative">
                 {/* Delete button */}
                 <button
                   onClick={() => handleDeleteClip(clip.id)}

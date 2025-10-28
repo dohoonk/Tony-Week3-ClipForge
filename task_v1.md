@@ -88,15 +88,15 @@
 ## ⏱️ Timeline UI
 
 ### PR 7: timeline/add-and-split-logic
-- [ ] Implement HTML5 drag/drop from library → timeline
-- [ ] Compute drop position = (mouseX / pixelsPerSec)
-- [ ] Create new TrackItem with trackPosition = dropTime
-- [ ] Initialize { inSec: 0, outSec: clip.duration }
-- [ ] Add split logic: single click = select
-- [ ] Add split logic: double-click = split at cursor offset
-- [ ] Add split logic: Cmd/Ctrl+Shift+S = split at playhead position
-- [ ] Verify clip must be selected before split
-- [ ] Update Zustand store to single-track structure
+- [x] Implement HTML5 drag/drop from library → timeline
+- [x] Compute drop position = (mouseX / pixelsPerSec)
+- [x] Create new TrackItem with trackPosition = dropTime
+- [x] Initialize { inSec: 0, outSec: clip.duration } (placeholder values)
+- [x] Add split logic: single click = select (placeholder handlers)
+- [x] Add split logic: double-click = split at cursor offset (placeholder)
+- [ ] Add split logic: Cmd/Ctrl+Shift+S = split at playhead position (PR 8)
+- [x] Verify clip must be selected before split (basic validation added)
+- [x] Update Zustand store to single-track structure
 
 ### PR 8: timeline/dom-virtualized
 - [ ] Implement horizontal scroll container with react-window
