@@ -14,6 +14,9 @@ export function Player() {
   const [countdown, setCountdown] = useState<number | null>(null)
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null)
   const [isStartingRecording, setIsStartingRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null)
+  const [recordingTimer, setRecordingTimer] = useState<NodeJS.Timeout | null>(null)
 
   // Get the currently playing clip path and duration
   const getCurrentVideoInfo = () => {
@@ -145,6 +148,14 @@ export function Player() {
       setIsRecording(false)
       console.log('[Player] Recording completed, UI state updated')
       
+      // Stop recording timer
+      if (recordingTimer) {
+        clearInterval(recordingTimer)
+        setRecordingTimer(null)
+      }
+      setRecordingStartTime(null)
+      setRecordingDuration(0)
+      
       try {
         // Double-check in store to prevent duplicates
         const existingClips = useStore.getState().clips
@@ -227,6 +238,13 @@ export function Player() {
         console.log('[Player] Recording already in progress, stopping first')
         await window.clipforge.stopRecording()
         setIsRecording(false)
+        // Clean up recording timer
+        if (recordingTimer) {
+          clearInterval(recordingTimer)
+          setRecordingTimer(null)
+        }
+        setRecordingStartTime(null)
+        setRecordingDuration(0)
         // Wait a moment for cleanup
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
@@ -275,6 +293,18 @@ export function Player() {
       setIsRecording(true)
       await window.clipforge.startRecording(recordingType)
       console.log('[Player] Recording started:', recordingType)
+      
+      // Start recording duration timer
+      const startTime = Date.now()
+      setRecordingStartTime(startTime)
+      setRecordingDuration(0)
+      
+      const timer = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000
+        setRecordingDuration(elapsed)
+      }, 100) // Update every 100ms for smooth display
+      
+      setRecordingTimer(timer)
     } catch (error) {
       console.error('[Player] Failed to start recording:', error)
       
@@ -284,6 +314,13 @@ export function Player() {
         // Don't set setIsRecording(false) - the recording is actually running
       } else {
         setIsRecording(false)
+        // Clean up recording timer on error
+        if (recordingTimer) {
+          clearInterval(recordingTimer)
+          setRecordingTimer(null)
+        }
+        setRecordingStartTime(null)
+        setRecordingDuration(0)
       }
       
       // Reset countdown if recording fails
@@ -301,6 +338,13 @@ export function Player() {
     } catch (error) {
       console.error('[Player] Failed to stop recording:', error)
       setIsRecording(false) // Only set false on error
+      // Clean up recording timer on error
+      if (recordingTimer) {
+        clearInterval(recordingTimer)
+        setRecordingTimer(null)
+      }
+      setRecordingStartTime(null)
+      setRecordingDuration(0)
     }
   }
 
@@ -318,8 +362,11 @@ export function Player() {
       if (countdownInterval) {
         clearInterval(countdownInterval)
       }
+      if (recordingTimer) {
+        clearInterval(recordingTimer)
+      }
     }
-  }, [countdownInterval])
+  }, [countdownInterval, recordingTimer])
 
   // Sync playhead with video timeupdate (throttled to ~30fps)
   useEffect(() => {
@@ -473,6 +520,19 @@ export function Player() {
             </button>
           )}
         </div>
+        
+        {/* Recording Indicator and Duration */}
+        {isRecording && (
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 bg-red-600 border-2 border-red-400 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-300 rounded-full animate-pulse"></div>
+              <span className="text-white font-bold text-sm">REC</span>
+            </div>
+            <div className="text-white font-mono text-sm font-bold">
+              {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toFixed(1).padStart(4, '0')}
+            </div>
+          </div>
+        )}
         
         {/* Time Display */}
         <div className="mt-3 text-center text-sm text-gray-400">
