@@ -139,7 +139,8 @@ export class FFmpegWrapper extends EventEmitter {
       // Build filter_complex string:
       // For each trackItem: trim + setpts (offset by trackPosition)
       const filterParts: string[] = []
-      const concatInputs: string[] = []
+      const videoConcatInputs: string[] = []
+      const audioConcatInputs: string[] = []
       
       // Map clip inputs by their index
       const clipIndexMap: Record<string, number> = {}
@@ -164,19 +165,25 @@ export class FFmpegWrapper extends EventEmitter {
         const outSec = itemData.outSec || clip.duration
         const position = itemData.trackPosition || 0
         
-        // Trim the clip
-        // [i:v]trim=inSec:outSec,setpts=PTS-STARTPTS → [v0]
-        // Then offset by trackPosition: setpts=PTS+position/TB
+        // Trim video and audio
+        const videoLabel = `v${streamIndex}`
+        const audioLabel = `a${streamIndex}`
         
-        const filterLabel = `v${streamIndex}`
-        filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${filterLabel}]`)
-        concatInputs.push(`[${filterLabel}]`)
+        // Video filter
+        filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${videoLabel}]`)
+        videoConcatInputs.push(`[${videoLabel}]`)
+        
+        // Audio filter
+        filterParts.push(`[${inputIndex}:a]atrim=${inSec}:${outSec},asetpts=PTS-STARTPTS+${position}/TB[${audioLabel}]`)
+        audioConcatInputs.push(`[${audioLabel}]`)
+        
         streamIndex++
       }
       
-      // Concatenate all trimmed segments
-      if (concatInputs.length > 0) {
-        filterParts.push(`${concatInputs.join('')}concat=n=${concatInputs.length}:v=1:a=0[outv]`)
+      // Concatenate all trimmed segments (video and audio)
+      if (videoConcatInputs.length > 0) {
+        filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[outv]`)
+        filterParts.push(`${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[outa]`)
         
         const filterComplex = filterParts.join(';')
         console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
@@ -184,8 +191,9 @@ export class FFmpegWrapper extends EventEmitter {
         command
           .complexFilter(filterComplex)
           .outputOptions(['-map [outv]'])
+          .outputOptions(['-map [outa]'])
           .outputOptions(['-c:v libx264', '-preset veryfast', '-crf 20'])
-          .outputOptions(['-c:a aac', '-b:a 192k']) // Audio codec (no audio for MVP)
+          .outputOptions(['-c:a aac', '-b:a 192k'])
           .on('start', (cmdline) => {
             console.log('[FFmpeg] Export started:', cmdline)
           })

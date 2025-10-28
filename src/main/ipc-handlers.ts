@@ -2,6 +2,8 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { ffmpegWrapper } from './ffmpeg-wrapper'
 import { projectIO } from './project-io'
 import { recordingService } from './recording-service'
+import os from 'os'
+import fs from 'fs'
 
 // Type definitions for IPC handlers
 type Clip = {
@@ -87,11 +89,18 @@ export function setupIpcHandlers() {
       throw new Error('Invalid output path: must be a non-empty string')
     }
 
-    console.log(`[IPC] exportTimeline called for: ${outPath}`)
+    // Expand ~ to home directory
+    const expandedPath = outPath.replace('~', os.homedir())
+    
+    // Ensure output directory exists
+    const outputDir = expandedPath.substring(0, expandedPath.lastIndexOf('/'))
+    fs.mkdirSync(outputDir, { recursive: true })
+    
+    console.log(`[IPC] exportTimeline called for: ${expandedPath}`)
     
     // Mock export with progress events (real implementation in PR 12)
     try {
-      await ffmpegWrapper.exportTimeline(project, outPath)
+      await ffmpegWrapper.exportTimeline(project, expandedPath)
       console.log('[IPC] exportTimeline completed')
       return
     } catch (error) {

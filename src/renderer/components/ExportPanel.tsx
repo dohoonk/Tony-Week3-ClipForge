@@ -62,7 +62,9 @@ export function ExportPanel() {
       
       // Generate output path
       const timestamp = Date.now()
-      const outputPath = `/Users/${process.env.USER || 'user'}/Movies/ClipForge/export_${timestamp}.mp4`
+      // Use ~/Movies/ClipForge/ for macOS
+      // This will be resolved by the main process
+      const outputPath = `~/Movies/ClipForge/export_${timestamp}.mp4`
       
       console.log('[Export] Starting export to:', outputPath)
       
