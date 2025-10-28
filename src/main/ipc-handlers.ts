@@ -224,6 +224,19 @@ export function setupIpcHandlers() {
     }
   })
 
+  // resetRecordingState - Reset recording state
+  ipcMain.handle('resetRecordingState', async (event) => {
+    console.log('[IPC] resetRecordingState called')
+    
+    try {
+      await recordingService.resetRecordingState()
+      return { success: true }
+    } catch (error: any) {
+      console.error('[IPC] Reset recording state failed:', error)
+      throw error
+    }
+  })
+
   // saveRecording - Save recording data from renderer
   ipcMain.handle('saveRecording', async (event, uint8Array: Uint8Array, outputPath: string) => {
     console.log('[IPC] saveRecording called:', outputPath)

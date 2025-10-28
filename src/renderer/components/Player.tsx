@@ -17,6 +17,8 @@ export function Player() {
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null)
   const [recordingTimer, setRecordingTimer] = useState<NodeJS.Timeout | null>(null)
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null)
+  const [webcamPreviewRef, setWebcamPreviewRef] = useState<HTMLVideoElement | null>(null)
 
   // Get the currently playing clip path and duration
   const getCurrentVideoInfo = () => {
@@ -210,6 +212,14 @@ export function Player() {
   }, [])
 
   const handlePlay = () => {
+    // If webcam preview is visible, stop it so the main video element is shown
+    if (webcamStream) {
+      stopWebcamPreview()
+    }
+    // Ensure we're showing the player, not the webcam preview UI
+    if (recordingType === 'webcam' && !isRecording && countdown === null) {
+      setRecordingType('screen')
+    }
     videoRef.current?.play()
   }
 
@@ -356,6 +366,85 @@ export function Player() {
     setCountdown(null)
   }
 
+  // Webcam preview functions
+  const startWebcamPreview = async () => {
+    try {
+      console.log('[Player] Starting webcam preview')
+      
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('getUserMedia is not supported in this browser')
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
+        audio: false // No audio for preview
+      })
+      
+      setWebcamStream(stream)
+      
+      // Set the stream to the preview video element
+      if (webcamPreviewRef) {
+        webcamPreviewRef.srcObject = stream
+      }
+      
+      console.log('[Player] Webcam preview started')
+    } catch (error) {
+      console.error('[Player] Failed to start webcam preview:', error)
+      
+      // Handle specific error cases
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          console.warn('[Player] Camera permission denied by user')
+        } else if (error.name === 'NotFoundError') {
+          console.warn('[Player] No camera found')
+        } else if (error.name === 'NotReadableError') {
+          console.warn('[Player] Camera is already in use')
+        } else {
+          console.warn('[Player] Camera error:', error.message)
+        }
+      }
+      
+      // Reset to screen recording if webcam fails
+      setRecordingType('screen')
+    }
+  }
+
+  const stopWebcamPreview = () => {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(track => track.stop())
+      setWebcamStream(null)
+      
+      if (webcamPreviewRef) {
+        webcamPreviewRef.srcObject = null
+      }
+      
+      console.log('[Player] Webcam preview stopped')
+    }
+  }
+
+  // Handle recording type change
+  const handleRecordingTypeChange = async (newType: 'screen' | 'webcam') => {
+    setRecordingType(newType)
+    
+    // Reset any stuck recording state
+    try {
+      await window.clipforge.resetRecordingState()
+    } catch (error) {
+      console.warn('[Player] Could not reset recording state:', error)
+    }
+    
+    if (newType === 'webcam') {
+      startWebcamPreview()
+    } else {
+      stopWebcamPreview()
+    }
+  }
+
   // Cleanup countdown interval on unmount
   useEffect(() => {
     return () => {
@@ -365,8 +454,11 @@ export function Player() {
       if (recordingTimer) {
         clearInterval(recordingTimer)
       }
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop())
+      }
     }
-  }, [countdownInterval, recordingTimer])
+  }, [countdownInterval, recordingTimer, webcamStream])
 
   // Sync playhead with video timeupdate (throttled to ~30fps)
   useEffect(() => {
@@ -439,17 +531,29 @@ export function Player() {
     <div className="flex flex-col bg-gray-900 border-b border-gray-700" style={{ maxHeight: '300px' }}>
       {/* Video Player */}
       <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ height: '280px', width: '100%' }}>
-        <video
-          ref={videoRef}
-          className="w-full h-full object-contain"
-          src={videoSrc}
-          controls={false} // We'll add custom controls
-          loop={loopEnabled}
-          preload="metadata"
-        />
-        
-        {!videoSrc && (
-          <p className="text-gray-500">Import a clip to preview</p>
+        {recordingType === 'webcam' && webcamStream && (isRecording || countdown !== null) ? (
+          <video
+            ref={setWebcamPreviewRef}
+            className="w-full h-full object-cover"
+            autoPlay
+            muted
+            playsInline
+          />
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              className="w-full h-full object-contain"
+              src={videoSrc}
+              controls={false} // We'll add custom controls
+              loop={loopEnabled}
+              preload="metadata"
+            />
+            
+            {!videoSrc && (
+              <p className="text-gray-500">Import a clip to preview</p>
+            )}
+          </>
         )}
       </div>
 
@@ -484,7 +588,7 @@ export function Player() {
         <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-700">
           <select
             value={recordingType}
-            onChange={(e) => setRecordingType(e.target.value as 'screen' | 'webcam')}
+            onChange={(e) => handleRecordingTypeChange(e.target.value as 'screen' | 'webcam')}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
             disabled={isRecording || countdown !== null}
           >

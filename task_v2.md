@@ -12,16 +12,16 @@
 ## 📹 Recording System v2
 
 ### PR 18: screen-recording-implementation
-- [ ] Implement desktopCapturer integration
-- [ ] Add MediaRecorder wrapper service
-- [ ] Create recording UI with source selection
-- [ ] Add 3-second countdown timer
-- [ ] Implement recording indicator + duration
-- [ ] Save to ~/Movies/ClipForge/recordings/
-- [ ] Add 30-minute recording cap
-- [ ] Handle low storage gracefully
-- [ ] Auto-import completed recordings to media library
-- [ ] Probe recording metadata on save
+- [x] Implement desktopCapturer integration
+- [x] Add MediaRecorder wrapper service
+- [x] Create recording UI with source selection
+- [x] Add 3-second countdown timer
+- [x] Implement recording indicator + duration
+- [x] Save to ~/Movies/ClipForge/recordings/
+- [x] Add 30-minute recording cap
+- [x] Handle low storage gracefully
+- [x] Auto-import completed recordings to media library
+- [x] Probe recording metadata on save
 
 ### PR 19: webcam-recording-support
 - [ ] Add getUserMedia() for webcam capture

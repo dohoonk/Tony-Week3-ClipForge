@@ -41,6 +41,19 @@ export class RecordingService extends EventEmitter {
     }
   }
 
+  async resetRecordingState(): Promise<void> {
+    console.log('[RecordingService] Resetting recording state')
+    this.isRecording = false
+    this.recordingType = null
+    this.currentOutputPath = null
+    this.recordingStartTime = null
+    
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId)
+      this.timeoutId = null
+    }
+  }
+
   async startRecording(options: RecordingOptions): Promise<void> {
     if (this.isRecording) {
       throw new Error('Recording already in progress')
@@ -166,7 +179,7 @@ export class RecordingService extends EventEmitter {
                 const uint8Array = new Uint8Array(arrayBuffer)
                 
                 // Send the recording data to main process using the correct API
-                await window.clipforge.saveRecording(uint8Array, '${outputPath}')
+                await window.clipforge.saveRecording(uint8Array, ${JSON.stringify(outputPath)})
                 
                 // Stop all tracks
                 stream.getTracks().forEach(track => track.stop())
@@ -206,12 +219,104 @@ export class RecordingService extends EventEmitter {
   }
 
   private async startWebcamRecording(outputPath: string): Promise<void> {
-    // For now, return success - real implementation will use getUserMedia API
-    // This is a placeholder for the MVP
-    console.log(`[RecordingService] Would record webcam to: ${outputPath}`)
-    
-    // TODO: Implement actual webcam recording using getUserMedia API
-    // This requires more complex setup and will be implemented fully in production
+    try {
+      console.log(`[RecordingService] Starting webcam recording to: ${outputPath}`)
+      
+      // Store the output path for later use
+      this.currentOutputPath = outputPath
+      
+      // Start webcam recording in the renderer process
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow) {
+        await mainWindow.webContents.executeJavaScript(`
+          (async () => {
+            try {
+              // Request webcam access
+              const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                  frameRate: { ideal: 30 }
+                },
+                audio: true
+              })
+              
+              console.log('[Recording] Webcam stream obtained:', stream)
+              
+              // Create MediaRecorder for webcam
+              const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8") 
+                ? "video/webm;codecs=vp8" 
+                : "video/webm"
+              
+              console.log('[Recording] Using mimeType:', mimeType)
+              
+              const mediaRecorder = new MediaRecorder(stream, {
+                mimeType: mimeType,
+                videoBitsPerSecond: 2500000 // 2.5 Mbps
+              })
+              
+              // Store references for cleanup
+              window.recordingService = {
+                mediaRecorder: mediaRecorder,
+                stream: stream
+              }
+              
+              const chunks = []
+              
+              mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                  chunks.push(event.data)
+                }
+              }
+              
+              mediaRecorder.onstop = async () => {
+                console.log('[Recording] Webcam recording stopped, saving...')
+                
+                try {
+                  const blob = new Blob(chunks, { type: mimeType })
+                  const arrayBuffer = await blob.arrayBuffer()
+                  const uint8Array = new Uint8Array(arrayBuffer)
+                  
+                  // Save the recording
+                  const result = await window.clipforge.saveRecording(uint8Array, ${JSON.stringify(outputPath)})
+                  
+                  if (result.success) {
+                    console.log('[Recording] Webcam recording saved successfully')
+                    window.recordingSaved = true
+                  } else {
+                    console.error('[Recording] Failed to save webcam recording')
+                    window.recordingSaved = false
+                  }
+                } catch (error) {
+                  console.error('[Recording] Error saving webcam recording:', error)
+                  window.recordingSaved = false
+                } finally {
+                  // Clean up stream
+                  if (window.recordingService && window.recordingService.stream) {
+                    window.recordingService.stream.getTracks().forEach(track => track.stop())
+                  }
+                }
+              }
+              
+              // Start recording
+              mediaRecorder.start(1000) // Collect data every second
+              console.log('[Recording] Webcam recording started')
+              
+              return true
+            } catch (error) {
+              console.error('[Recording] Failed to start webcam recording:', error)
+              return false
+            }
+          })()
+        `)
+      }
+      
+      console.log('[RecordingService] Webcam recording started successfully')
+      
+    } catch (error) {
+      console.error('[RecordingService] Failed to start webcam recording:', error)
+      throw error
+    }
   }
 
   async stopRecording(): Promise<{ path: string; metadata: any }> {
