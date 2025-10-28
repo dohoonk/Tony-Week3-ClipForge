@@ -9,8 +9,9 @@ export function Player() {
   const playheadSec = store.ui.playheadSec
   const isPlaying = store.ui.isPlaying
   const [loopEnabled, setLoopEnabled] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
-  const [recordingType, setRecordingType] = useState<'screen' | 'webcam'>('screen')
+  const [recordingType, setRecordingType] = useState<'screen' | 'webcam' | 'pip'>('screen')
   const [countdown, setCountdown] = useState<number | null>(null)
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null)
   const [isStartingRecording, setIsStartingRecording] = useState(false)
@@ -142,6 +143,16 @@ export function Player() {
       
       console.log('[Player] Recording completed:', path, metadata)
       
+      // For PiP recordings, only process the final _pip.webm file
+      const isPiPFinal = path.includes('_pip.webm')
+      const isPiPInitial = path.includes('.webm') && !path.includes('_pip.webm') && !path.includes('_webcam.webm')
+      
+      // For PiP recordings, skip initial files and only process the final combined file
+      if (isPiPInitial && metadata.type === 'pip') {
+        console.log('[Player] Skipping PiP initial file, waiting for final processed file:', path)
+        return
+      }
+      
       // Check if we've already processed this path
       if (processedPaths.has(path)) {
         console.log('[Player] This recording already processed, skipping:', path)
@@ -152,6 +163,7 @@ export function Player() {
       
       // Set recording state to false since completion event means recording is done
       setIsRecording(false)
+      setIsProcessing(false) // Clear processing state when recording is complete
       console.log('[Player] Recording completed, UI state updated')
       
       // Stop recording timer
@@ -208,6 +220,14 @@ export function Player() {
     }
 
     window.clipforge.onRecordingComplete(handleRecordingComplete)
+    
+    // Listen for processing events (PiP overlay)
+    const handleProcessing = (data: { message: string; progress: number }) => {
+      console.log('[Player] Processing:', data.message, data.progress + '%')
+      setIsProcessing(true)
+    }
+    
+    window.clipforge.onRecordingProcessing(handleProcessing)
     
     return () => {
       isMounted = false
@@ -454,7 +474,7 @@ export function Player() {
   }
 
   // Handle recording type change
-  const handleRecordingTypeChange = async (newType: 'screen' | 'webcam') => {
+  const handleRecordingTypeChange = async (newType: 'screen' | 'webcam' | 'pip') => {
     setRecordingType(newType)
     
     // Reset any stuck recording state
@@ -465,6 +485,10 @@ export function Player() {
     }
     
     if (newType === 'webcam') {
+      startWebcamPreview()
+    } else if (newType === 'pip') {
+      // For PiP, we'll start webcam preview for now
+      // TODO: Implement live PiP preview
       startWebcamPreview()
     } else {
       stopWebcamPreview()
@@ -622,12 +646,13 @@ export function Player() {
         <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-700">
           <select
             value={recordingType}
-            onChange={(e) => handleRecordingTypeChange(e.target.value as 'screen' | 'webcam')}
+            onChange={(e) => handleRecordingTypeChange(e.target.value as 'screen' | 'webcam' | 'pip')}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
             disabled={isRecording || countdown !== null}
           >
             <option value="screen">Screen</option>
             <option value="webcam">Webcam</option>
+            <option value="pip">PiP (Screen + Webcam)</option>
           </select>
           
           {countdown !== null ? (
@@ -649,6 +674,11 @@ export function Player() {
             >
               🔴 Start Recording
             </button>
+          ) : isProcessing ? (
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span className="text-white font-medium">Processing...</span>
+            </div>
           ) : (
             <button
               onClick={handleStopRecording}

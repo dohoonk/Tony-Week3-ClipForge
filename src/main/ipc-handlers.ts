@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, desktopCapturer } from 'electron'
 import { ffmpegWrapper } from './ffmpeg-wrapper'
 import { projectIO } from './project-io'
 import { recordingService } from './recording-service'
@@ -166,13 +166,13 @@ export function setupIpcHandlers() {
     }
   })
 
-  // startRecording - Begin screen/webcam recording
-  ipcMain.handle('startRecording', async (event, type: 'screen' | 'webcam') => {
+  // startRecording - Begin screen/webcam/pip recording
+  ipcMain.handle('startRecording', async (event, type: 'screen' | 'webcam' | 'pip') => {
     console.log('[IPC] startRecording called for type:', type)
     
     try {
-      if (!type || (type !== 'screen' && type !== 'webcam')) {
-        throw new Error('Invalid recording type. Must be "screen" or "webcam"')
+      if (!type || (type !== 'screen' && type !== 'webcam' && type !== 'pip')) {
+        throw new Error('Invalid recording type. Must be "screen", "webcam", or "pip"')
       }
 
       await recordingService.startRecording({ type })
@@ -189,6 +189,16 @@ export function setupIpcHandlers() {
         const mainWindow = BrowserWindow.fromWebContents(event.sender)
         if (mainWindow) {
           mainWindow.webContents.send('recording:completed', data.path, data.metadata)
+        }
+      })
+
+      recordingService.on('processing', (data: any) => {
+        console.log('[IPC] Recording processing:', data)
+        
+        // Send to renderer
+        const mainWindow = BrowserWindow.fromWebContents(event.sender)
+        if (mainWindow) {
+          mainWindow.webContents.send('recording:processing', data.message, data.progress)
         }
       })
 
@@ -256,6 +266,24 @@ export function setupIpcHandlers() {
       return { success: true, path: outputPath }
     } catch (error: any) {
       console.error('[IPC] Save recording failed:', error)
+      throw error
+    }
+  })
+
+  // getScreenSources - Get available screen sources for recording
+  ipcMain.handle('getScreenSources', async () => {
+    console.log('[IPC] getScreenSources called')
+    
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1920, height: 1080 }
+      })
+      
+      console.log('[IPC] Found screen sources:', sources.length)
+      return sources
+    } catch (error) {
+      console.error('[IPC] Failed to get screen sources:', error)
       throw error
     }
   })

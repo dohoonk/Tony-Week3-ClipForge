@@ -23,11 +23,18 @@ contextBridge.exposeInMainWorld('clipforge', {
   resetRecordingState: () => ipcRenderer.invoke('resetRecordingState'),
   saveRecording: (uint8Array: Uint8Array, outputPath: string) => 
     ipcRenderer.invoke('saveRecording', uint8Array, outputPath),
+  getScreenSources: () => ipcRenderer.invoke('getScreenSources'),
   
   // Event listeners
   onRecordingComplete: (callback: (path: string, metadata: any) => void) => {
     ipcRenderer.on('recording:completed', (_event, path: string, metadata: any) => 
       callback(path, metadata)
+    )
+  },
+  
+  onRecordingProcessing: (callback: (message: string, progress: number) => void) => {
+    ipcRenderer.on('recording:processing', (_event, message: string, progress: number) => 
+      callback(message, progress)
     )
   },
   
