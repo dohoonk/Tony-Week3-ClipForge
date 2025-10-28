@@ -19,6 +19,10 @@ export function Player() {
   const [recordingTimer, setRecordingTimer] = useState<NodeJS.Timeout | null>(null)
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null)
   const [webcamPreviewRef, setWebcamPreviewRef] = useState<HTMLVideoElement | null>(null)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('')
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState<string>('')
 
   // Get the currently playing clip path and duration
   const getCurrentVideoInfo = () => {
@@ -212,12 +216,9 @@ export function Player() {
   }, [])
 
   const handlePlay = () => {
-    // If webcam preview is visible, stop it so the main video element is shown
-    if (webcamStream) {
+    // If webcam preview is visible and we're not recording, stop it to show main video
+    if (webcamStream && !isRecording && countdown === null) {
       stopWebcamPreview()
-    }
-    // Ensure we're showing the player, not the webcam preview UI
-    if (recordingType === 'webcam' && !isRecording && countdown === null) {
       setRecordingType('screen')
     }
     videoRef.current?.play()
@@ -366,46 +367,71 @@ export function Player() {
     setCountdown(null)
   }
 
+  // Device enumeration
+  const enumerateDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      setAvailableDevices(devices)
+      
+      // Set default camera and microphone
+      const cameras = devices.filter(device => device.kind === 'videoinput')
+      const microphones = devices.filter(device => device.kind === 'audioinput')
+      
+      if (cameras.length > 0 && !selectedCameraId) {
+        setSelectedCameraId(cameras[0].deviceId)
+      }
+      if (microphones.length > 0 && !selectedMicrophoneId) {
+        setSelectedMicrophoneId(microphones[0].deviceId)
+      }
+    } catch (error) {
+      console.error('[Player] Failed to enumerate devices:', error)
+    }
+  }
+
   // Webcam preview functions
   const startWebcamPreview = async () => {
     try {
       console.log('[Player] Starting webcam preview')
+      setPermissionError(null)
       
       // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('getUserMedia is not supported in this browser')
       }
       
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // Enumerate devices first
+      await enumerateDevices()
+      
+      const constraints: MediaStreamConstraints = {
         video: {
+          deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
           width: { ideal: 1280 },
           height: { ideal: 720 },
           frameRate: { ideal: 30 }
         },
         audio: false // No audio for preview
-      })
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
       
       setWebcamStream(stream)
-      
-      // Set the stream to the preview video element
-      if (webcamPreviewRef) {
-        webcamPreviewRef.srcObject = stream
-      }
       
       console.log('[Player] Webcam preview started')
     } catch (error) {
       console.error('[Player] Failed to start webcam preview:', error)
       
-      // Handle specific error cases
+      // Handle specific error cases with user-friendly messages
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
-          console.warn('[Player] Camera permission denied by user')
+          setPermissionError('Camera permission denied. Please allow camera access and try again.')
         } else if (error.name === 'NotFoundError') {
-          console.warn('[Player] No camera found')
+          setPermissionError('No camera found. Please connect a camera and try again.')
         } else if (error.name === 'NotReadableError') {
-          console.warn('[Player] Camera is already in use')
+          setPermissionError('Camera is already in use by another application.')
+        } else if (error.name === 'OverconstrainedError') {
+          setPermissionError('Camera settings are not supported. Try selecting a different camera.')
         } else {
-          console.warn('[Player] Camera error:', error.message)
+          setPermissionError(`Camera error: ${error.message}`)
         }
       }
       
@@ -444,6 +470,14 @@ export function Player() {
       stopWebcamPreview()
     }
   }
+
+  // Set webcam stream to preview video element when ref is available
+  useEffect(() => {
+    if (webcamPreviewRef && webcamStream) {
+      webcamPreviewRef.srcObject = webcamStream
+      console.log('[Player] Set webcam stream to preview element')
+    }
+  }, [webcamPreviewRef, webcamStream])
 
   // Cleanup countdown interval on unmount
   useEffect(() => {
@@ -531,7 +565,7 @@ export function Player() {
     <div className="flex flex-col bg-gray-900 border-b border-gray-700" style={{ maxHeight: '300px' }}>
       {/* Video Player */}
       <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ height: '280px', width: '100%' }}>
-        {recordingType === 'webcam' && webcamStream && (isRecording || countdown !== null) ? (
+        {recordingType === 'webcam' && webcamStream ? (
           <video
             ref={setWebcamPreviewRef}
             className="w-full h-full object-cover"
@@ -624,6 +658,58 @@ export function Player() {
             </button>
           )}
         </div>
+        
+        {/* Device Selection (Webcam mode only) */}
+        {recordingType === 'webcam' && (
+          <div className="mt-4 pt-4 border-t border-gray-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Camera Selection */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Camera:</label>
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => setSelectedCameraId(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  disabled={isRecording || countdown !== null}
+                >
+                  {availableDevices
+                    .filter(device => device.kind === 'videoinput')
+                    .map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              
+              {/* Microphone Selection */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Microphone:</label>
+                <select
+                  value={selectedMicrophoneId}
+                  onChange={(e) => setSelectedMicrophoneId(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  disabled={isRecording || countdown !== null}
+                >
+                  {availableDevices
+                    .filter(device => device.kind === 'audioinput')
+                    .map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            
+            {/* Permission Error Display */}
+            {permissionError && (
+              <div className="mt-3 p-3 bg-red-900 border border-red-600 rounded text-red-200 text-sm">
+                {permissionError}
+              </div>
+            )}
+          </div>
+        )}
         
         {/* Recording Indicator and Duration */}
         {isRecording && (

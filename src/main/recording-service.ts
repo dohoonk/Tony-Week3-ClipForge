@@ -231,14 +231,18 @@ export class RecordingService extends EventEmitter {
         await mainWindow.webContents.executeJavaScript(`
           (async () => {
             try {
-              // Request webcam access
+              // Request webcam access with audio
               const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                   width: { ideal: 1280 },
                   height: { ideal: 720 },
                   frameRate: { ideal: 30 }
                 },
-                audio: true
+                audio: {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true
+                }
               })
               
               console.log('[Recording] Webcam stream obtained:', stream)
@@ -252,7 +256,8 @@ export class RecordingService extends EventEmitter {
               
               const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: mimeType,
-                videoBitsPerSecond: 2500000 // 2.5 Mbps
+                videoBitsPerSecond: 2500000, // 2.5 Mbps
+                audioBitsPerSecond: 128000 // 128 kbps
               })
               
               // Store references for cleanup

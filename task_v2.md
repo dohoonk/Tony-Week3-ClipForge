@@ -24,11 +24,11 @@
 - [x] Probe recording metadata on save
 
 ### PR 19: webcam-recording-support
-- [ ] Add getUserMedia() for webcam capture
-- [ ] Create webcam preview component
-- [ ] Implement webcam-only recording mode
-- [ ] Add microphone audio capture
-- [ ] Handle permissions and device selection
+- [x] Add getUserMedia() for webcam capture ✅
+- [x] Create webcam preview component ✅
+- [x] Implement webcam-only recording mode ✅
+- [x] Add microphone audio capture ✅
+- [x] Handle permissions and device selection ✅
 
 ### PR 20: pip-recording-system
 - [ ] Implement simultaneous screen + webcam capture
