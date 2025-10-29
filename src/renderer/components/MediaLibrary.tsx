@@ -289,16 +289,6 @@ export function MediaLibrary() {
                   <p className="text-sm text-white font-medium truncate flex-1" title={clip.name}>
                     {clip.name}
                   </p>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteClip(clip.id)
-                    }}
-                    className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded transition-all duration-200"
-                    title="Delete clip from library"
-                  >
-                    ✕
-                  </button>
                 </div>
                 <div className="text-xs text-gray-400 space-y-0.5">
                   <div className="flex justify-between">
