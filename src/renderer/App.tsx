@@ -4,6 +4,7 @@ import { Timeline } from './components/Timeline'
 import { Player } from './components/Player'
 import { ExportPanel } from './components/ExportPanel'
 import { TranscriptionTestPanel } from './components/TranscriptionTestPanel'
+import { AIAssistantPanel } from './components/AIAssistantPanel'
 
 function App() {
   const [timelineHeight, setTimelineHeight] = useState(33) // Percentage of available height
@@ -95,6 +96,7 @@ function App() {
           </div>
         </div>
         <ExportPanel />
+        <AIAssistantPanel />
         <TranscriptionTestPanel />
       </main>
     </div>

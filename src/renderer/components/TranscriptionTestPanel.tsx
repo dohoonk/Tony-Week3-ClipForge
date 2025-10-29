@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store'
-import type { Transcript } from '@shared/types'
+import type { Transcript, FillerSpan } from '@shared/types'
 
 export function TranscriptionTestPanel() {
   const { clips } = useStore()
@@ -9,6 +9,8 @@ export function TranscriptionTestPanel() {
   const [progress, setProgress] = useState(0)
   const [progressMessage, setProgressMessage] = useState('')
   const [transcript, setTranscript] = useState<Transcript | null>(null)
+  const [fillers, setFillers] = useState<FillerSpan[]>([])
+  const [isDetectingFillers, setIsDetectingFillers] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [output, setOutput] = useState<string>('')
 
@@ -89,6 +91,51 @@ export function TranscriptionTestPanel() {
     }
   }
 
+  const handleDetectFillers = async () => {
+    if (!selectedClipId) {
+      setError('Please select a clip first')
+      return
+    }
+
+    const clip = clips[selectedClipId]
+    if (!clip) {
+      setError('Clip not found')
+      return
+    }
+
+    setIsDetectingFillers(true)
+    setError(null)
+    setFillers([])
+    appendOutput(`\n🔍 Detecting fillers in: ${clip.name}`)
+
+    try {
+      const detectedFillers = await window.clipforge.detectFillers(
+        clip.path,
+        clip.id,
+        clip.hash,
+        { confMin: undefined } // No confidence threshold for now
+      )
+      setFillers(detectedFillers)
+      appendOutput(`✅ Found ${detectedFillers.length} filler span(s)`)
+      if (detectedFillers.length > 0) {
+        appendOutput(`\n--- Detected Fillers ---`)
+        detectedFillers.forEach((filler, i) => {
+          appendOutput(`${i + 1}. "${filler.word}" at ${filler.startSec.toFixed(2)}s-${filler.endSec.toFixed(2)}s`)
+          appendOutput(`   Padded: ${filler.paddedStart.toFixed(2)}s-${filler.paddedEnd.toFixed(2)}s`)
+          appendOutput(`   Confidence: ${filler.confidence.toFixed(2)}`)
+        })
+      } else {
+        appendOutput(`No fillers detected in this clip.`)
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || String(err)
+      setError(errorMsg)
+      appendOutput(`\n❌ Filler detection failed: ${errorMsg}`)
+    } finally {
+      setIsDetectingFillers(false)
+    }
+  }
+
   const clipList = Object.values(clips)
   const selectedClip = selectedClipId ? clips[selectedClipId] : null
 
@@ -123,14 +170,23 @@ export function TranscriptionTestPanel() {
         {/* Transcribe Button */}
         <button
           onClick={handleTranscribe}
-          disabled={!selectedClipId || isTranscribing}
+          disabled={!selectedClipId || isTranscribing || isDetectingFillers}
           className="btn btn-primary w-full"
         >
           {isTranscribing ? '🔄 Transcribing...' : '🎤 Transcribe Clip'}
         </button>
 
+        {/* Detect Fillers Button */}
+        <button
+          onClick={handleDetectFillers}
+          disabled={!selectedClipId || isDetectingFillers || isTranscribing}
+          className="btn btn-warning w-full"
+        >
+          {isDetectingFillers ? '🔍 Detecting Fillers...' : '🔍 Detect Fillers'}
+        </button>
+
         {/* Progress Display */}
-        {isTranscribing && (
+        {(isTranscribing || isDetectingFillers) && (
           <div className="space-y-2">
             <p className="text-xs text-gray-300">{progressMessage || 'Processing...'}</p>
             <div className="progress-container">
@@ -153,11 +209,27 @@ export function TranscriptionTestPanel() {
         {/* Transcript Summary */}
         {transcript && (
           <div className="p-2 bg-green-900 bg-opacity-50 border border-green-600 rounded text-xs">
-            <div className="text-green-300 font-semibold mb-1">✅ Success!</div>
+            <div className="text-green-300 font-semibold mb-1">✅ Transcription Complete</div>
             <div className="text-green-200">
               <div>Words: {transcript.words.length}</div>
               <div>Duration: {transcript.durationSec.toFixed(2)}s</div>
               <div>Model: {transcript.modelVersion}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Fillers Summary */}
+        {fillers.length > 0 && (
+          <div className="p-2 bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded text-xs">
+            <div className="text-yellow-300 font-semibold mb-1">🔍 Fillers Detected</div>
+            <div className="text-yellow-200">
+              <div>Count: {fillers.length}</div>
+              {fillers.slice(0, 3).map((f, i) => (
+                <div key={i} className="mt-1">
+                  "{f.word}" @ {f.startSec.toFixed(1)}s
+                </div>
+              ))}
+              {fillers.length > 3 && <div>... and {fillers.length - 3} more</div>}
             </div>
           </div>
         )}

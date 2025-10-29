@@ -1,4 +1,4 @@
-import { Project, Transcript } from '@shared/types'
+import { Project, Transcript, FillerSpan } from '@shared/types'
 
 interface Window {
   clipforge: {
@@ -25,6 +25,7 @@ interface Window {
     
     // AI transcription operations
     transcribeClipByPath: (clipPath: string, clipHash?: string) => Promise<Transcript>
+    detectFillers: (clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => Promise<FillerSpan[]>
     
     // Event listeners
     onRecordingComplete: (callback: (path: string, metadata: any) => void) => void

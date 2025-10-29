@@ -5,6 +5,7 @@ import { recordingService } from './recording-service'
 import { fileIngestService } from './file-ingest-service'
 import { transcriptCache } from './ai/transcript-cache'
 import { WhisperRunner } from './ai/whisper-runner'
+import { detectFillerSpans } from '../shared/ai/filler-detection'
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
@@ -410,6 +411,42 @@ export function setupIpcHandlers() {
         win.webContents.send('transcription:error', { message: error.message })
       })
       
+      throw error
+    }
+  })
+
+  // detectFillers - Detect filler words in a clip's transcript
+  ipcMain.handle('detectFillers', async (_event, clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => {
+    try {
+      console.log(`[IPC] detectFillers called for clipId: ${clipId}, path: ${clipPath}`)
+
+      // First, get transcript by transcribing (cache is disabled)
+      const runner = new WhisperRunner()
+      
+      // Forward progress events to renderer
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      if (!transcript || transcript.words.length === 0) {
+        throw new Error('Transcript is empty - no words to analyze')
+      }
+
+      // Detect fillers
+      const fillers = detectFillerSpans(transcript, clipId, {
+        confMin: options?.confMin,
+        padMs: 40, // Default padding
+        mergeGapMs: 120, // Default merge gap
+      })
+
+      console.log(`[IPC] Detected ${fillers.length} filler spans for clipId: ${clipId}`)
+      return fillers
+    } catch (error: any) {
+      console.error('[IPC] Detect fillers failed:', error)
       throw error
     }
   })

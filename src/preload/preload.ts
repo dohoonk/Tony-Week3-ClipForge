@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('clipforge', {
   // AI transcription operations
   transcribeClipByPath: (clipPath: string, clipHash?: string) => 
     ipcRenderer.invoke('transcribeClipByPath', clipPath, clipHash),
+  detectFillers: (clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => 
+    ipcRenderer.invoke('detectFillers', clipPath, clipId, clipHash, options),
   
   // Event listeners
   onRecordingComplete: (callback: (path: string, metadata: any) => void) => {
