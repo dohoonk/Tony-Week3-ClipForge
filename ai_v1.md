@@ -755,18 +755,415 @@ extraResources:
 
 ---
 
-### PR AI-6 — mcp-server (Optional, Ship Later)
+### PR AI-6 — settings-panel
 
-**Goal:** Expose AI features as MCP tools for AI agents.
+**Goal:** Create Settings UI for OpenAI API key management with encrypted storage.
 
 #### Tasks
-- [ ] MCP server skeleton
-- [ ] Tool registry
-- [ ] Security & rate limiting
-- [ ] Bridge to existing IPC functions
-- [ ] CLI demo client
 
-**Note:** Defer until core pipeline is validated.
+##### 1. Config Service
+- [ ] Create `src/main/config-service.ts`:
+  - `getConfigPath(): string` → `~/.clipforge/config.json`
+  - `loadConfig(): Promise<Config | null>` (read JSON, decrypt API key)
+  - `saveConfig(config: Config): Promise<void>` (encrypt API key, write JSON)
+  - `getOpenAIKey(): Promise<string | null>` (try ENV first, then config)
+  - Type: `Config = { openaiApiKey?: string }` (encrypted value stored)
+- [ ] Use Electron `safeStorage`:
+  - `safeStorage.isEncryptionAvailable()` check
+  - `safeStorage.encryptString(key)` for storage
+  - `safeStorage.decryptString(encrypted)` for retrieval
+- [ ] Handle cases:
+  - Config file doesn't exist → return null
+  - Encryption unavailable → warn user, store plaintext (fallback)
+  - Invalid JSON → reset config file
+
+##### 2. Settings UI Component
+- [ ] Create `src/renderer/components/SettingsDialog.tsx`:
+  - Modal overlay (fixed position, z-index high)
+  - Header: "Settings" + close button
+  - Tabs structure:
+    - "AI Services" (default)
+    - Future: "General", "Export", etc.
+  - AI Services tab:
+    - Section: "OpenAI API"
+    - Input field: `openaiApiKey` (password type, masked)
+    - Placeholder: "sk-..."
+    - "Test Connection" button
+    - Status indicator: "✅ Connected" / "❌ Invalid" / "Not set"
+    - Save/Cancel buttons at bottom
+- [ ] State management:
+  - `apiKey` (local state, not persisted until Save)
+  - `testStatus: 'idle' | 'testing' | 'success' | 'error'` (with message)
+  - `isOpen: boolean` (controlled by App.tsx)
+
+##### 3. Settings IPC Handlers
+- [ ] Add to `src/main/ipc-handlers.ts`:
+  - `ipcMain.handle('loadConfig', async () => { ... })`
+  - `ipcMain.handle('saveConfig', async (event, config: Config) => { ... })`
+  - `ipcMain.handle('testOpenAIConnection', async (event, apiKey: string) => { ... })`
+- [ ] Test connection logic:
+  - Send minimal request to `/v1/models` endpoint
+  - Check status code 200
+  - Return `{ success: boolean, message: string }`
+
+##### 4. Preload API
+- [ ] Add to `src/preload/preload.ts`:
+  - `loadConfig: () => Promise<Config | null>`
+  - `saveConfig: (config: Config) => Promise<void>`
+  - `testOpenAIConnection: (apiKey: string) => Promise<{ success: boolean, message: string }>`
+- [ ] Update `src/renderer/types.d.ts` with types
+
+##### 5. Integration
+- [ ] Add Settings button to `src/renderer/App.tsx` header:
+  - Icon: ⚙️ or gear icon
+  - Position: top-right
+  - Opens `SettingsDialog` modal
+- [ ] Load config on app startup:
+  - Call `loadConfig()` in `useEffect` or main process
+  - Store in global state if needed
+
+##### 6. Error Handling
+- [ ] Handle encryption unavailable:
+  - Show warning: "Secure storage not available. Key will be stored in plaintext."
+  - Option to proceed or cancel
+- [ ] Handle invalid key format:
+  - Validate: starts with "sk-"
+  - Show error inline
+- [ ] Handle write permissions:
+  - Try/catch on config save
+  - Show user-friendly error
+
+**Acceptance Criteria:**
+- ✅ Settings button opens modal
+- ✅ API key can be entered and saved
+- ✅ Key is encrypted using safeStorage
+- ✅ Config file saved to `~/.clipforge/config.json`
+- ✅ Test connection validates key
+- ✅ Key loaded on app startup
+- ✅ Environment variable `OPENAI_API_KEY` takes precedence
+
+**File Structure:**
+```
+src/main/
+  ├── config-service.ts (NEW)
+  └── ipc-handlers.ts (MODIFY)
+
+src/renderer/
+  ├── components/
+  │   └── SettingsDialog.tsx (NEW)
+  └── App.tsx (MODIFY - add settings button)
+
+src/preload/
+  └── preload.ts (MODIFY)
+
+src/shared/
+  └── types.ts (ADD Config type)
+```
+
+---
+
+### PR AI-7 — transcript-and-review-ipc
+
+**Goal:** Add IPC handlers for fresh transcription and OpenAI script review.
+
+#### Tasks
+
+##### 1. Fresh Transcription Handler
+- [ ] Update `src/main/ipc-handlers.ts`:
+  - Modify `transcribeClipByPath` to add `forceFresh?: boolean` parameter
+  - OR create new handler: `transcribeClipFresh(clipPath: string, clipHash?: string)`
+  - Bypass cache check when `forceFresh === true`
+  - Always run Whisper (fresh transcription)
+- [ ] Update `src/main/ai/whisper-runner.ts` if needed:
+  - Ensure it works without cache dependency
+- [ ] Update preload API:
+  - `transcribeClipFresh: (clipPath: string) => Promise<Transcript>`
+
+##### 2. OpenAI Service
+- [ ] Create `src/main/ai/openai-service.ts`:
+  - `getApiKey(): Promise<string | null>` (env var or config)
+  - `reviewTranscript(transcript: string, context: 'casual' | 'interview' | 'social' | 'business'): Promise<ScriptReview>`
+  - Build prompt using template from spec
+  - Call `/v1/chat/completions` endpoint:
+    - Model: `gpt-4o-mini`
+    - Temperature: 0.7
+    - Response format: JSON (if supported) or parse JSON from content
+  - Handle errors:
+    - Invalid API key (401)
+    - Rate limit (429)
+    - Network errors
+    - JSON parsing errors
+- [ ] Type definitions:
+  ```typescript
+  type ScriptReview = {
+    summary: string
+    clarityNotes: string[]
+    pacingNotes: string[]
+    fillerNotes: string[]
+    suggestions: Array<{
+      original: string
+      improved: string
+    }>
+  }
+  ```
+- [ ] Add to `src/shared/types.ts`
+
+##### 3. Review IPC Handler
+- [ ] Add to `src/main/ipc-handlers.ts`:
+  - `ipcMain.handle('reviewTranscript', async (event, clipPath: string, context: string) => { ... })`
+  - Flow:
+    1. Load transcript (fresh via `transcribeClipFresh`)
+    2. Get OpenAI API key (env or config)
+    3. If no key → throw error with user-friendly message
+    4. Call `openaiService.reviewTranscript(transcriptText, context)`
+    5. Return `ScriptReview` JSON
+  - Handle errors gracefully:
+    - Missing API key → emit IPC error event
+    - OpenAI API failure → return error message
+    - Transcription failure → propagate error
+
+##### 4. Cost Estimation Helper
+- [ ] Create `src/shared/ai/cost-estimator.ts`:
+  - `estimateReviewCost(transcriptLength: number): { tokens: number, cost: number }`
+  - Rough calculation:
+    - Input tokens: ~transcriptLength / 4 (characters to tokens)
+    - Output tokens: ~500 (estimated JSON response)
+    - Cost: (input * $0.15 + output * $0.60) / 1M tokens (gpt-4o-mini pricing)
+  - Return: `{ estimatedTokens: number, estimatedCost: number, costInCents: number }`
+
+##### 5. Preload API
+- [ ] Add to `src/preload/preload.ts`:
+  - `transcribeClipFresh: (clipPath: string) => Promise<Transcript>`
+  - `reviewTranscript: (clipPath: string, context: string) => Promise<ScriptReview>`
+  - `estimateReviewCost: (transcriptLength: number) => Promise<{ estimatedTokens: number, estimatedCost: number }>`
+- [ ] Update `src/renderer/types.d.ts`
+
+##### 6. Error Events
+- [ ] Add IPC events:
+  - `transcription:progress` (reuse from AI-1)
+  - `transcription:error` (reuse from AI-1)
+  - `review:progress` (optional, for future)
+  - `review:error` (new)
+
+**Acceptance Criteria:**
+- ✅ `transcribeClipFresh` always runs Whisper (no cache)
+- ✅ `reviewTranscript` returns structured JSON
+- ✅ Missing API key shows user-friendly error
+- ✅ Cost estimation accurate within reasonable bounds
+- ✅ All OpenAI errors handled gracefully
+- ✅ Transcript text properly formatted in prompt
+
+**File Structure:**
+```
+src/main/
+  ├── ai/
+  │   ├── openai-service.ts (NEW)
+  │   └── whisper-runner.ts (MODIFY - ensure fresh mode)
+  └── ipc-handlers.ts (MODIFY)
+
+src/shared/
+  ├── ai/
+  │   └── cost-estimator.ts (NEW)
+  └── types.ts (ADD ScriptReview type)
+
+src/preload/
+  └── preload.ts (MODIFY)
+```
+
+---
+
+### PR AI-8 — script-review-ui
+
+**Goal:** Build Script Review tab UI in AI Assistant panel with context selection and feedback display.
+
+#### Tasks
+
+##### 1. AI Assistant Panel Tabs
+- [ ] Update `src/renderer/components/AIAssistantPanel.tsx`:
+  - Add tab state: `[activeTab, setActiveTab] = useState<'fillers' | 'review'>`
+  - Tab buttons:
+    - "🔍 Fillers" (existing)
+    - "📝 Script Review" (new)
+  - Render content based on active tab
+  - Keep existing filler detection UI in "Fillers" tab
+
+##### 2. Script Review Tab Content
+- [ ] Create `src/renderer/components/ScriptReviewTab.tsx`:
+  - Props: `selectedClipId: string | null`, `clips: Record<string, Clip>`
+  - State:
+    - `selectedContext: 'casual' | 'interview' | 'social' | 'business' | null`
+    - `isTranscribing: boolean`
+    - `isReviewing: boolean`
+    - `review: ScriptReview | null`
+    - `error: string | null`
+    - `estimatedCost: { tokens: number, cost: number } | null`
+  - Layout:
+    - Context dropdown (top)
+    - Cost estimate display (conditional)
+    - "Generate Review" button
+    - Loading states
+    - Error display
+    - Review sections (conditional)
+
+##### 3. Context Dropdown
+- [ ] Add `<select>` with options:
+  - `<option value="casual">Casual</option>`
+  - `<option value="interview">Interview</option>`
+  - `<option value="social">Social Media</option>`
+  - `<option value="business">Business</option>`
+  - Disable when no clip selected or processing
+
+##### 4. Review Generation Flow
+- [ ] Handle button click:
+  1. Validate: clip selected + context selected
+  2. Check API key (call `loadConfig()` or check error state)
+  3. If no key → show error: "Please set OpenAI API key in Settings"
+  4. Estimate cost (use transcript length estimate or wait for transcript)
+  5. Show "Transcribing..." state
+  6. Call `transcribeClipFresh(clipPath)`
+  7. On complete, estimate cost based on actual transcript length
+  8. Show cost estimate: "Estimated cost: $X.XX. Continue?"
+  9. Show "Analyzing..." state
+  10. Call `reviewTranscript(clipPath, context)`
+  11. Display review results
+
+##### 5. Review Display Sections
+- [ ] Summary section:
+  - Card/panel with review summary text
+  - Styled with background + border
+- [ ] Clarity section:
+  - Heading: "Clarity"
+  - List items from `clarityNotes`
+  - Bullet list styling
+- [ ] Pacing section:
+  - Heading: "Pacing & Delivery"
+  - List items from `pacingNotes`
+- [ ] Filler section:
+  - Heading: "Filler Usage"
+  - Display `fillerNotes` array
+  - Optional: Link to Fillers tab if fillers detected
+- [ ] Suggestions section:
+  - Heading: "Improvement Suggestions"
+  - For each suggestion:
+    - Display `original` text
+    - Display `improved` text
+    - Copy button (copy improved text to clipboard)
+    - Visual diff styling (gray for original, green for improved)
+
+##### 6. Loading States
+- [ ] Transcription loading:
+  - Progress bar + message: "Transcribing audio..."
+  - Listen to `transcription:progress` events
+- [ ] Review loading:
+  - Spinner + message: "Analyzing script..."
+  - No progress (OpenAI doesn't emit progress)
+  - Estimated wait time: "This may take 10-30 seconds"
+
+##### 7. Error States
+- [ ] Missing API key:
+  - Card with warning icon
+  - Message: "OpenAI API key required"
+  - Button: "Open Settings" → opens SettingsDialog
+- [ ] Transcription error:
+  - Display error message
+  - Retry button
+- [ ] Review error:
+  - Display error (rate limit, invalid key, etc.)
+  - Retry button
+- [ ] Network error:
+  - User-friendly message
+  - Retry button
+
+##### 8. Cost Display
+- [ ] Show before review:
+  - Text: "Estimated cost: $X.XX (approximately Y tokens)"
+  - Small text: "Based on transcript length"
+- [ ] Styling:
+  - Info badge/chip
+  - Position: below context dropdown or above button
+
+##### 9. Empty States
+- [ ] No clip selected:
+  - Message: "Select a clip to review"
+  - Icon or placeholder
+- [ ] No review yet:
+  - Message: "Generate a review to see feedback"
+  - Placeholder UI
+
+##### 10. Integration
+- [ ] Update `AIAssistantPanel.tsx`:
+  - Import `ScriptReviewTab`
+  - Add tab buttons
+  - Conditional render: Fillers tab vs Review tab
+  - Share `selectedClipId` logic (if needed)
+
+##### 11. Styling & Polish
+- [ ] Use existing design system:
+  - `.btn`, `.panel`, `.card` classes
+  - Consistent spacing and colors
+  - Responsive layout
+- [ ] Accessibility:
+  - ARIA labels for buttons
+  - Keyboard navigation for tabs
+  - Focus management
+
+**Acceptance Criteria:**
+- ✅ Script Review tab visible in AI Assistant
+- ✅ Context dropdown works
+- ✅ Cost estimate displayed before review
+- ✅ Review generates and displays correctly
+- ✅ All error states handled
+- ✅ Copy buttons work for suggestions
+- ✅ Loading states clear and informative
+- ✅ UI matches design system
+
+**File Structure:**
+```
+src/renderer/
+  └── components/
+      ├── AIAssistantPanel.tsx (MODIFY - add tabs)
+      └── ScriptReviewTab.tsx (NEW)
+```
+
+---
+
+## Implementation Order
+
+1. **PR AI-6** (Foundation): Settings panel + API key storage
+2. **PR AI-7** (Backend): IPC handlers + OpenAI service
+3. **PR AI-8** (Frontend): UI tab + review display
+
+## Dependencies
+
+- PR AI-1: Whisper transcription (already done, needs fresh mode)
+- OpenAI API account: User provides key
+- Node modules: `node-fetch` or `axios` for HTTP requests
+
+## Testing Checklist
+
+**PR AI-6:**
+- [ ] Settings modal opens/closes
+- [ ] API key saves and encrypts
+- [ ] Config file created at `~/.clipforge/config.json`
+- [ ] Test connection validates key
+- [ ] Environment variable `OPENAI_API_KEY` works
+
+**PR AI-7:**
+- [ ] `transcribeClipFresh` bypasses cache
+- [ ] `reviewTranscript` calls OpenAI correctly
+- [ ] Returns structured JSON
+- [ ] Handles missing key error
+- [ ] Handles rate limit error
+- [ ] Cost estimation accurate
+
+**PR AI-8:**
+- [ ] Tab switching works
+- [ ] Context dropdown functional
+- [ ] Review generation completes
+- [ ] All sections display correctly
+- [ ] Copy buttons work
+- [ ] Error states show properly
+- [ ] Cost estimate displays
 
 ---
 
