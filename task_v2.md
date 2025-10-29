@@ -55,12 +55,20 @@
 - [ ] Add track height management
 - [ ] Create track labels and controls
 - [ ] Handle track visibility toggles
-- [ ] Implement timeline virtualization (react-window)
 - [ ] Render only visible track items
 - [ ] Optimize scroll/zoom performance
-- [ ] Add throttled scroll sync between tracks/ruler (30fps) to prevent jitter
+- [ ] **Stretch:** Add throttled scroll sync between tracks/ruler (30fps) to prevent jitter
+- [ ] **Stretch:** Implement timeline virtualization (react-window)
 
-### PR 23: trim-controls-ui
+### PR 23: timeline-sequence-playback
+- [ ] Implement continuous timeline playback
+- [ ] Add sequence logic to detect next clip
+- [ ] Handle automatic playhead advancement
+- [ ] Support multi-track playback priority
+- [ ] Add timeline play/pause controls
+- [ ] Handle gaps and overlaps between clips
+
+### PR 24: trim-controls-ui
 - [ ] Add trim handles to timeline clips
 - [ ] Implement drag-to-resize functionality
 - [ ] Update inSec/outSec on trim
@@ -331,34 +339,35 @@ type ExportJob = {
 ### M1 - Multi-Track Timeline (Nov 16-20)
 - PR 21: Multi-track foundation
 - PR 22: Track interactions
-- PR 23: Trim controls UI
+- PR 23: Timeline sequence playback
+- PR 24: Trim controls UI
 - Target: Professional timeline editor
 
 ### M2 - Effects & Audio (Nov 21-25)
-- PR 24: Text overlay system
-- PR 25: Basic transitions
-- PR 26: Color filters
-- PR 27: Audio management
+- PR 25: Text overlay system
+- PR 26: Basic transitions
+- PR 27: Color filters
+- PR 28: Audio management
 - Target: Creative editing tools
 
 ### M3 - Export & Polish (Nov 26-30)
-- PR 28: Export presets
-- PR 29: Export queue system
-- PR 30: Export UI enhancements
+- PR 29: Export presets
+- PR 30: Export queue system
+- PR 31: Export UI enhancements
 - Target: Professional export workflow
 
 ### M4 - Stability & Performance (Dec 1-5)
-- PR 31: Undo/redo system
-- PR 32: Autosave v2
-- PR 33: Timeline improvements
-- PR 34: Media library v2
-- PR 35: Preview system
-- PR 35b: Preview compositor engine
-- PR 35c: Proxy media manager
-- PR 36: Performance optimizations
-- PR 37: Error handling v2
-- PR 38: Documentation
-- PR 39: Onboarding experience
+- PR 32: Undo/redo system
+- PR 33: Autosave v2
+- PR 34: Timeline improvements
+- PR 35: Media library v2
+- PR 36: Preview system
+- PR 36b: Preview compositor engine
+- PR 36c: Proxy media manager
+- PR 37: Performance optimizations
+- PR 38: Error handling v2
+- PR 39: Documentation
+- PR 40: Onboarding experience
 - Target: Production-ready stability with user onboarding
 
 ---

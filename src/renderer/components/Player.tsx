@@ -34,25 +34,187 @@ export function Player() {
   const [selectedCameraId, setSelectedCameraId] = useState<string>('')
   const [selectedMicrophoneId, setSelectedMicrophoneId] = useState<string>('')
 
-  // Get the currently playing clip path and duration
+  // Get the currently playing clip path and duration based on timeline only
   const getCurrentVideoInfo = () => {
-    // TODO: Get from selected track item
-    const availableClips = Object.values(clips).filter(clip => {
-      // Skip mock recordings that don't exist yet
-      if (clip.duration === 0 && clip.path.includes('/recordings/')) {
-        return false
-      }
-      return true
-    })
-    
-    const firstClip = availableClips[0]
-    if (firstClip) {
-      return {
-        path: firstClip.path,
-        duration: firstClip.duration
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    const t = playheadSec || 0
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+      for (const item of items) {
+        const clip = store.clips[item.clipId]
+        if (!clip) continue
+        const start = Number(item.trackPosition) || 0
+        const clipDur = Math.max(0, Number(clip?.duration) || 0)
+        const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
+        const effDur = Math.min(reqDur || 0, clipDur || 0)
+        const end = start + (isFinite(effDur) ? effDur : 0)
+        if (t >= start && t <= end) {
+          return { path: clip.path, duration: clip.duration }
+        }
       }
     }
     return { path: undefined, duration: 0 }
+  }
+
+  // Get clip at current playhead position for timeline sequence playback
+  const getClipAtPlayheadPosition = () => {
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    const currentTime = playheadSec || 0
+    
+    // Find the first track with a clip at the current time
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      
+      const trackItems = Object.values(store.trackItems).filter(item => item.trackId === track.id)
+      
+      for (const item of trackItems) {
+        const clip = store.clips[item.clipId]
+        if (!clip) continue
+
+        const itemStart = Number(item.trackPosition) || 0
+        const clipDuration = Math.max(0, Number(clip?.duration) || 0)
+        const requestedDuration = Math.max(0, Number(item.outSec) - Number(item.inSec))
+        const effectiveDuration = Math.min(requestedDuration || 0, clipDuration || 0)
+        const itemEnd = itemStart + (isFinite(effectiveDuration) ? effectiveDuration : 0)
+        
+        // Check if playhead is within this clip
+        if (currentTime >= itemStart && currentTime <= itemEnd) {
+          return clip
+        }
+      }
+    }
+    
+    return null
+  }
+
+  // Find the next clip in the timeline sequence
+  const getNextClipInSequence = () => {
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    const currentTime = playheadSec || 0
+    
+    // Collect all clips with their start times
+    const allClips: Array<{ clip: any; trackItem: any; startTime: number }> = []
+    
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      
+      const trackItems = Object.values(store.trackItems).filter(item => item.trackId === track.id)
+      
+      for (const item of trackItems) {
+        const clip = store.clips[item.clipId]
+        if (!clip) continue
+        
+        allClips.push({
+          clip,
+          trackItem: item,
+          startTime: item.trackPosition
+        })
+      }
+    }
+    
+    // Sort by start time
+    allClips.sort((a, b) => a.startTime - b.startTime)
+    
+    // Find the next clip after current time
+    for (const clipData of allClips) {
+      if (clipData.startTime > currentTime) {
+        return clipData
+      }
+    }
+    
+    return null
+  }
+
+  // Handle automatic playhead advancement to next clip
+  const handleVideoEnded = () => {
+    if (!isPlaying) return
+    
+    console.log('[Player] Video ended, checking for next clip...')
+    
+    const nextClip = getNextClipInSequence()
+    if (nextClip) {
+      // Advance playhead to next clip
+      store.setPlayheadSec(nextClip.startTime)
+      console.log('[Player] Advanced to next clip:', nextClip.clip.name, 'at', nextClip.startTime)
+    } else {
+      // No more clips, stop playback
+      store.setIsPlaying(false)
+      console.log('[Player] Reached end of timeline')
+    }
+  }
+
+  // Handle video time updates to check if we should advance to next clip
+  const handleTimeUpdate = () => {
+    if (!isPlaying || !videoRef.current) return
+    
+    const currentClip = getClipAtPlayheadPosition()
+    if (!currentClip) return
+    
+    const currentTime = playheadSec || 0
+    const videoTime = videoRef.current.currentTime
+    
+    // Find the track item for the current clip
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    let currentTrackItem = null
+    
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      
+      const trackItems = Object.values(store.trackItems).filter(item => item.trackId === track.id)
+      
+      for (const item of trackItems) {
+        const clip = store.clips[item.clipId]
+        if (clip && clip.id === currentClip.id) {
+          currentTrackItem = item
+          break
+        }
+      }
+      if (currentTrackItem) break
+    }
+    
+    if (currentTrackItem) {
+      const clip = store.clips[currentTrackItem.clipId]
+      const clipDuration = Math.max(0, Number(clip?.duration) || 0)
+      const requestedDuration = Math.max(0, Number(currentTrackItem.outSec) - Number(currentTrackItem.inSec))
+      const effectiveDuration = Math.min(requestedDuration || 0, clipDuration || 0)
+
+      // Compute end using the video's own timebase to avoid race with playhead updates
+      const inSec = Number(currentTrackItem.inSec) || 0
+      const videoEnd = inSec + (isFinite(effectiveDuration) ? effectiveDuration : 0)
+
+      // Check if we've reached the end of this clip's segment based on the video clock
+      if (videoTime >= videoEnd - 0.01) {
+        console.log('[Player] Reached end of segment (video time), advancing to next clip')
+        handleVideoEnded()
+      }
+    }
+  }
+
+  // Calculate total timeline duration (clamped to actual clip durations)
+  const getTimelineDuration = () => {
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    let maxEndTime = 0
+
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+
+      const itemsForTrack = Object.values(store.trackItems).filter(item => item.trackId === track.id)
+
+      for (const item of itemsForTrack) {
+        const clip = store.clips[item.clipId]
+        const clipDuration = Math.max(0, Number(clip?.duration) || 0)
+        const requestedDuration = Math.max(0, Number(item.outSec) - Number(item.inSec))
+        const effectiveDuration = Math.min(requestedDuration || 0, clipDuration || 0)
+
+        const itemEnd = Number(item.trackPosition) + (isFinite(effectiveDuration) ? effectiveDuration : 0)
+        if (itemEnd > maxEndTime) {
+          maxEndTime = itemEnd
+        }
+      }
+    }
+
+    return maxEndTime
   }
 
   const { path: currentVideoPath, duration: currentVideoDuration } = getCurrentVideoInfo()
@@ -60,10 +222,146 @@ export function Player() {
   // Convert absolute path to file:// URL for HTML5 video
   const videoSrc = currentVideoPath ? `file://${currentVideoPath}` : undefined
 
+  // Update video source and seek when playhead changes
   useEffect(() => {
-    // Log video source for debugging
-    console.log('[Player] Video source:', videoSrc)
-  }, [videoSrc])
+    const video = videoRef.current
+    if (!video) return
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    const t = playheadSec || 0
+
+    // Find item under playhead
+    let chosen: { clip: any; item: any; start: number } | null = null
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+      for (const item of items) {
+        const clip = store.clips[item.clipId]
+        if (!clip) continue
+        const start = Number(item.trackPosition) || 0
+        const clipDur = Math.max(0, Number(clip?.duration) || 0)
+        const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
+        const effDur = Math.min(reqDur || 0, clipDur || 0)
+        const end = start + (isFinite(effDur) ? effDur : 0)
+        if (t >= start && t <= end) { chosen = { clip, item, start }; break }
+      }
+      if (chosen) break
+    }
+
+    // If nothing under playhead and user is playing, jump to next clip
+    if (!chosen && isPlaying) {
+      let best: { clip: any; item: any; start: number } | null = null
+      for (const track of sortedTracks) {
+        if (!track.visible) continue
+        const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+        for (const item of items) {
+          const clip = store.clips[item.clipId]
+          if (!clip) continue
+          const start = Number(item.trackPosition) || 0
+          if (start > t && (!best || start < best.start)) best = { clip, item, start }
+        }
+      }
+      if (best) {
+        chosen = best
+        // Align playhead to the next clip start for clarity
+        store.setPlayheadSec(best.start)
+      }
+    }
+
+    if (!chosen) {
+      // No clip to play
+      video.pause()
+      return
+    }
+
+    const neededSrc = `file://${chosen.clip.path}`
+    const inSec = Number(chosen.item.inSec) || 0
+    const seekTime = inSec + Math.max(0, (t - chosen.start))
+
+    // If source changed (e.g., moved to a different clip), update src and align once
+    if (video.src !== neededSrc) {
+      video.src = neededSrc
+      video.load()
+      if (isFinite(seekTime)) {
+        try { video.currentTime = seekTime } catch {}
+      }
+    } else if (!isPlaying) {
+      // Only seek during paused state to avoid jitter during playback
+      if (isFinite(seekTime)) {
+        try { video.currentTime = seekTime } catch {}
+      }
+    }
+
+    if (isPlaying && video.paused) {
+      video.play().catch(() => {})
+    }
+  }, [videoSrc, isPlaying, playheadSec])
+
+  // Smooth playhead sync using requestVideoFrameCallback when available
+  // (falls back to requestAnimationFrame). Commits to store at ~10Hz to avoid churn.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    let rafId: number | null = null
+    let lastMs = 0
+    const frameInterval = 33 // ~30fps sampling
+    let lastCommitMs = 0
+    const commitInterval = 100 // commit to store at 10Hz
+
+    const step = (now: number) => {
+      if (!isPlaying) { return }
+      if (now - lastMs >= frameInterval) {
+        const hitClip = getClipAtPlayheadPosition()
+        if (hitClip) {
+          const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+          outer: for (const track of sortedTracks) {
+            if (!track.visible) continue
+            const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+            for (const item of items) {
+              const clip = store.clips[item.clipId]
+              if (!clip || clip.id !== hitClip.id) continue
+              const inSec = Number(item.inSec) || 0
+              const start = Number(item.trackPosition) || 0
+              const rel = Math.max(0, video.currentTime - inSec)
+              const mapped = start + rel
+              const nowMs = performance.now()
+              const current = useStore.getState().ui.playheadSec
+              if ((nowMs - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
+                useStore.getState().setPlayheadSec(mapped)
+                lastCommitMs = nowMs
+              }
+              break outer
+            }
+          }
+        }
+        lastMs = now
+      }
+      rafId = requestAnimationFrame(step)
+    }
+
+    // Prefer requestVideoFrameCallback for decoder-synced updates
+    let cancelVideoCallback: (() => void) | null = null
+    const hasRVFC = typeof (video as any).requestVideoFrameCallback === 'function'
+
+    if (isPlaying) {
+      if (hasRVFC) {
+        let handle: number | null = null
+        const loop = (_now: number, _meta: any) => {
+          step(performance.now())
+          handle = (video as any).requestVideoFrameCallback(loop)
+        }
+        handle = (video as any).requestVideoFrameCallback(loop)
+        cancelVideoCallback = () => {
+          try { if (handle != null) (video as any).cancelVideoFrameCallback(handle) } catch {}
+        }
+      } else {
+        rafId = requestAnimationFrame(step)
+      }
+    }
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      if (cancelVideoCallback) cancelVideoCallback()
+    }
+  }, [isPlaying, videoSrc])
 
   useEffect(() => {
     const video = videoRef.current
@@ -250,7 +548,59 @@ export function Player() {
       stopWebcamPreview()
       setRecordingType('screen')
     }
-    videoRef.current?.play()
+    const video = videoRef.current
+    if (!video) return
+    const t = playheadSec || 0
+    // Start at clip under playhead or next clip after
+    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+    let chosen: { clip: any; item: any; start: number } | null = null
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+      for (const item of items) {
+        const clip = store.clips[item.clipId]
+        if (!clip) continue
+        const start = Number(item.trackPosition) || 0
+        const inSec = Number(item.inSec) || 0
+        const clipDur = Math.max(0, Number(clip?.duration) || 0)
+        const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
+        const effDur = Math.min(reqDur || 0, clipDur || 0)
+        const end = start + (isFinite(effDur) ? effDur : 0)
+        if (t >= start && t <= end) { chosen = { clip, item, start }; break }
+      }
+      if (chosen) break
+    }
+    if (!chosen) {
+      // find next
+      let best: { clip: any; item: any; start: number } | null = null
+      for (const track of sortedTracks) {
+        if (!track.visible) continue
+        const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+        for (const item of items) {
+          const clip = store.clips[item.clipId]
+          if (!clip) continue
+          const start = Number(item.trackPosition) || 0
+          if (start > t && (!best || start < best.start)) {
+            best = { clip, item, start }
+          }
+        }
+      }
+      chosen = best
+    }
+    if (!chosen) { store.setIsPlaying(false); return }
+    const neededSrc = `file://${chosen.clip.path}`
+    if (video.src !== neededSrc) {
+      video.src = neededSrc
+      video.load()
+    }
+    // If we came from a gap, jump playhead to the start of the next clip and seek to its inSec
+    if (t < chosen.start) {
+      store.setPlayheadSec(chosen.start)
+    }
+    const seek = (Number(chosen.item.inSec) || 0) + (t >= chosen.start ? (t - chosen.start) : 0)
+    try { video.currentTime = seek } catch {}
+    store.setIsPlaying(true)
+    video.play().catch(() => {})
   }
 
   const handlePause = () => {
@@ -593,47 +943,7 @@ export function Player() {
     }
   }, [countdownInterval, recordingTimer, webcamStream, screenPreviewStream])
 
-  // Sync playhead with video timeupdate (throttled to ~30fps)
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    let lastUpdate = 0
-    let frameCount = 0
-    let debugStartTime = Date.now()
-    const throttleMs = 33 // ~30fps
-
-    const handleTimeUpdate = () => {
-      const now = Date.now()
-      if (now - lastUpdate >= throttleMs) {
-        useStore.getState().setPlayheadSec(video.currentTime)
-        lastUpdate = now
-        frameCount++
-        
-        // Debug: log FPS every second
-        if (frameCount % 30 === 0) {
-          const elapsed = (Date.now() - debugStartTime) / 1000
-          const fps = frameCount / elapsed
-          console.log(`[Player] Playhead updates: ~${fps.toFixed(1)} fps (target: 30fps)`)
-        }
-      }
-    }
-
-    // Use requestAnimationFrame for smooth animation
-    let rafId: number
-    const handleFrame = () => {
-      handleTimeUpdate()
-      rafId = requestAnimationFrame(handleFrame)
-    }
-
-    video.addEventListener('timeupdate', handleTimeUpdate)
-    rafId = requestAnimationFrame(handleFrame)
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate)
-      cancelAnimationFrame(rafId)
-    }
-  }, [])
+  // Removed previous generic timeupdate sync; playhead is updated in the 100ms interval above
 
   // Sync playhead dragging to video (when user clicks timeline)
   useEffect(() => {
@@ -641,11 +951,30 @@ export function Player() {
     if (!video || !videoSrc) return
 
     // Throttle video position updates to avoid feedback loops
-    const timeDifference = Math.abs(video.currentTime - playheadSec)
-    
-    // Only update if difference is significant (>0.1s) or if video is paused
-    if (timeDifference > 0.1 || !isPlaying) {
-      video.currentTime = playheadSec
+    // Only update when paused/not playing; avoid seeking while playing to prevent jitter
+    if (!isPlaying) {
+      // Seek relative to track item under playhead
+      const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+      const t = playheadSec
+      for (const track of sortedTracks) {
+        if (!track.visible) continue
+        const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+        for (const item of items) {
+          const clip = store.clips[item.clipId]
+          if (!clip) continue
+          const start = Number(item.trackPosition) || 0
+          const clipDur = Math.max(0, Number(clip?.duration) || 0)
+          const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
+          const effDur = Math.min(reqDur || 0, clipDur || 0)
+          const end = start + (isFinite(effDur) ? effDur : 0)
+          if (t >= start && t <= end) {
+            const inSec = Number(item.inSec) || 0
+            const seek = inSec + (t - start)
+            try { video.currentTime = seek } catch {}
+            return
+          }
+        }
+      }
     }
   }, [playheadSec, isPlaying, videoSrc])
 
@@ -690,6 +1019,9 @@ export function Player() {
               controls={false} // We'll add custom controls
               loop={loopEnabled}
               preload="metadata"
+              playsInline
+              onEnded={handleVideoEnded}
+              onTimeUpdate={handleTimeUpdate}
             />
             
             {!videoSrc && (
@@ -840,7 +1172,7 @@ export function Player() {
         
         {/* Time Display */}
         <div className="mt-3 text-center text-sm text-gray-400">
-          {isNaN(playheadSec || 0) ? '0.0' : (playheadSec || 0).toFixed(1)}s / {currentVideoDuration > 0 && !isNaN(currentVideoDuration) && isFinite(currentVideoDuration) ? currentVideoDuration.toFixed(1) + 's' : '0.0s'}
+          {isNaN(playheadSec || 0) ? '0.0' : (playheadSec || 0).toFixed(1)}s / {getTimelineDuration().toFixed(1)}s
         </div>
       </div>
     </div>
