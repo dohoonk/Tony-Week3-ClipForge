@@ -143,7 +143,7 @@ export class FFmpegWrapper extends EventEmitter {
    * @param project Project data with clips and trackItems (flat or nested)
    * @param outputPath Output file path
    */
-  async exportTimeline(project: any, outputPath: string): Promise<void> {
+  async exportTimeline(project: any, outputPath: string, resolution: '720p' | '1080p' | 'source' = '1080p'): Promise<void> {
     return new Promise((resolve, reject) => {
       // Handle both flat (from Zustand) and nested (from Project type) structures
       let clips = project.clips
@@ -235,7 +235,23 @@ export class FFmpegWrapper extends EventEmitter {
         
         // Concatenate all trimmed segments (video and audio)
         if (videoConcatInputs.length > 0) {
-          filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[outv]`)
+          // Concatenate video
+          const videoConcatLabel = resolution === 'source' ? 'outv' : 'concatv'
+          filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[${videoConcatLabel}]`)
+          
+          // Apply scale filter if resolution is specified (not source)
+          if (resolution !== 'source') {
+            let scaleFilter = ''
+            if (resolution === '720p') {
+              scaleFilter = '[concatv]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[outv]'
+            } else if (resolution === '1080p') {
+              scaleFilter = '[concatv]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[outv]'
+            }
+            if (scaleFilter) {
+              filterParts.push(scaleFilter)
+            }
+          }
+          
           const audioUsable = hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length
           if (audioUsable) {
             filterParts.push(`${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[outa]`)
@@ -248,6 +264,7 @@ export class FFmpegWrapper extends EventEmitter {
           
           const filterComplex = filterParts.join(';')
           console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
+          console.log(`[FFmpeg] Export resolution: ${resolution}`)
           
           command
             .complexFilter(filterComplex)

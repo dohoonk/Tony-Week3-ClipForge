@@ -115,12 +115,12 @@
 - [x] Apply snap during drag-drop and trim
 
 ### PR 23.6: export-resolution-options
-- [ ] Add resolution selector to export panel
-- [ ] Support 720p (1280x720)
-- [ ] Support 1080p (1920x1080)
-- [ ] Support source resolution (use original)
-- [ ] Apply resolution via FFmpeg scale filter
-- [ ] Update export UI with resolution dropdown
+- [x] Add resolution selector to export panel
+- [x] Support 720p (1280x720)
+- [x] Support 1080p (1920x1080)
+- [x] Support source resolution (use original)
+- [x] Apply resolution via FFmpeg scale filter
+- [x] Update export UI with resolution dropdown
 
 ---
 

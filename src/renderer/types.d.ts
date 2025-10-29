@@ -13,7 +13,7 @@ interface Window {
     openProject: () => Promise<Project | null>
     
     // Export operations
-    exportTimeline: (project: Project, outPath: string) => Promise<void>
+    exportTimeline: (project: Project, outPath: string, resolution?: '720p' | '1080p' | 'source') => Promise<void>
     
     // Recording operations
     startRecording: (options: { type: 'screen' | 'webcam' | 'pip' }) => Promise<{ success: boolean }>

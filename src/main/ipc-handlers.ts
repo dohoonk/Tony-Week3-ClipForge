@@ -93,7 +93,7 @@ export function setupIpcHandlers() {
   })
 
   // exportTimeline - Export project to MP4 with progress events
-  ipcMain.handle('exportTimeline', async (_event, project: Project, outPath: string) => {
+  ipcMain.handle('exportTimeline', async (_event, project: Project, outPath: string, resolution?: '720p' | '1080p' | 'source') => {
     // Input validation
     if (!project || typeof project !== 'object') {
       throw new Error('Invalid project: must be a valid project object')
@@ -110,11 +110,11 @@ export function setupIpcHandlers() {
     const outputDir = expandedPath.substring(0, expandedPath.lastIndexOf('/'))
     fs.mkdirSync(outputDir, { recursive: true })
     
-    console.log(`[IPC] exportTimeline called for: ${expandedPath}`)
+    console.log(`[IPC] exportTimeline called for: ${expandedPath}, resolution: ${resolution || '1080p'}`)
     
     // Mock export with progress events (real implementation in PR 12)
     try {
-      await ffmpegWrapper.exportTimeline(project, expandedPath)
+      await ffmpegWrapper.exportTimeline(project, expandedPath, resolution || '1080p')
       console.log('[IPC] exportTimeline completed')
       return
     } catch (error) {

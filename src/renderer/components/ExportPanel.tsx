@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store'
+
+export type ExportResolution = '720p' | '1080p' | 'source'
 
 export function ExportPanel() {
   const store = useStore()
@@ -7,6 +9,7 @@ export function ExportPanel() {
   const [progress, setProgress] = useState(0)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [resolution, setResolution] = useState<ExportResolution>('1080p')
 
   const trackItemsCount = Object.keys(store.trackItems).length
 
@@ -66,10 +69,10 @@ export function ExportPanel() {
       // This will be resolved by the main process
       const outputPath = `~/Movies/ClipForge/export_${timestamp}.mp4`
       
-      console.log('[Export] Starting export to:', outputPath)
+      console.log('[Export] Starting export to:', outputPath, 'Resolution:', resolution)
       
-      // Call export function
-      await window.clipforge.exportTimeline(project, outputPath)
+      // Call export function with resolution
+      await window.clipforge.exportTimeline(project, outputPath, resolution)
       
       setExportStatus('Export completed successfully!')
       setProgress(100)
@@ -94,6 +97,21 @@ export function ExportPanel() {
             <p className="text-xs text-gray-400">Clips on Timeline:</p>
             <p className="text-lg font-bold text-white">{trackItemsCount}</p>
           </div>
+        </div>
+
+        {/* Resolution Selector */}
+        <div className="space-y-2">
+          <label className="text-xs text-gray-400">Export Resolution</label>
+          <select
+            value={resolution}
+            onChange={(e) => setResolution(e.target.value as ExportResolution)}
+            disabled={isExporting}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="720p">720p (1280x720)</option>
+            <option value="1080p">1080p (1920x1080)</option>
+            <option value="source">Source Resolution</option>
+          </select>
         </div>
 
         {/* Progress Display */}

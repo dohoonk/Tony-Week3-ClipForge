@@ -16,8 +16,8 @@ contextBridge.exposeInMainWorld('clipforge', {
   openProject: () => ipcRenderer.invoke('openProject'),
   
   // Export operations
-  exportTimeline: (project: any, outPath: string) => 
-    ipcRenderer.invoke('exportTimeline', project, outPath),
+  exportTimeline: (project: any, outPath: string, resolution?: '720p' | '1080p' | 'source') => 
+    ipcRenderer.invoke('exportTimeline', project, outPath, resolution),
   
   // Recording operations
   startRecording: (options: any) => 
