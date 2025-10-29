@@ -69,9 +69,9 @@
 - [x] Handle gaps and overlaps between clips
 
 ### PR 24: trim-controls-ui
-- [ ] Add trim handles to timeline clips
-- [ ] Implement drag-to-resize functionality
-- [ ] Update inSec/outSec on trim
+- [x] Add trim handles to timeline clips
+- [x] Implement drag-to-resize functionality
+- [x] Update inSec/outSec on trim
 - [ ] Add visual feedback for trim bounds
 - [ ] Validate trim constraints
 
