@@ -10,6 +10,11 @@ declare global {
 
 export function Player() {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const lastSrcRef = useRef<string | undefined>(undefined)
+  const handledInfinitySrcRef = useRef<string | undefined>(undefined)
+  const advanceLockUntilRef = useRef<number>(0)
+  const activeClipRef = useRef<{ clipId: string; itemId: string } | null>(null)
+  const EPS = 0.005 // 5ms boundary fudge to avoid end/start ambiguity
   const store = useStore()
   const clips = store.clips
   const trackItems = store.trackItems
@@ -36,6 +41,13 @@ export function Player() {
 
   // Get the currently playing clip path and duration based on timeline only
   const getCurrentVideoInfo = () => {
+    const active = activeClipRef.current
+    if (isPlaying && active) {
+      const clip = store.clips[active.clipId]
+      if (clip) {
+        return { path: clip.path, duration: clip.duration }
+      }
+    }
     const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
     const t = playheadSec || 0
     for (const track of sortedTracks) {
@@ -49,7 +61,7 @@ export function Player() {
         const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
         const effDur = Math.min(reqDur || 0, clipDur || 0)
         const end = start + (isFinite(effDur) ? effDur : 0)
-        if (t >= start && t <= end) {
+        if (t >= start && t < (end - EPS)) {
           return { path: clip.path, duration: clip.duration }
         }
       }
@@ -59,6 +71,10 @@ export function Player() {
 
   // Get clip at current playhead position for timeline sequence playback
   const getClipAtPlayheadPosition = () => {
+    if (isPlaying && activeClipRef.current) {
+      const clip = store.clips[activeClipRef.current.clipId]
+      return clip || null
+    }
     const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
     const currentTime = playheadSec || 0
     
@@ -79,7 +95,7 @@ export function Player() {
         const itemEnd = itemStart + (isFinite(effectiveDuration) ? effectiveDuration : 0)
         
         // Check if playhead is within this clip
-        if (currentTime >= itemStart && currentTime <= itemEnd) {
+        if (currentTime >= itemStart && currentTime < (itemEnd - EPS)) {
           return clip
         }
       }
@@ -118,7 +134,7 @@ export function Player() {
     
     // Find the next clip after current time
     for (const clipData of allClips) {
-      if (clipData.startTime > currentTime) {
+      if (clipData.startTime > currentTime + EPS) {
         return clipData
       }
     }
@@ -134,13 +150,34 @@ export function Player() {
     
     const nextClip = getNextClipInSequence()
     if (nextClip) {
-      // Advance playhead to next clip
-      store.setPlayheadSec(nextClip.startTime)
+      // Advance and immediately switch source to the next clip to avoid race
+      const video = videoRef.current
+      if (video) {
+        const neededSrc = `file://${nextClip.clip.path}`
+        if (lastSrcRef.current !== neededSrc) {
+          lastSrcRef.current = neededSrc
+          if (video.src !== neededSrc) {
+            video.src = neededSrc
+          }
+          video.load()
+        }
+        const seek = (Number(nextClip.trackItem.inSec) || 0) + EPS
+        try { video.currentTime = seek } catch {}
+        video.play().catch(() => {})
+      }
+      // Hold the src lock briefly to prevent flip-flop back to previous clip
+      advanceLockUntilRef.current = Date.now() + 400
+      store.setPlayheadSec(nextClip.startTime + EPS)
+      store.setIsPlaying(true)
+      activeClipRef.current = { clipId: nextClip.clip.id, itemId: nextClip.trackItem.id }
       console.log('[Player] Advanced to next clip:', nextClip.clip.name, 'at', nextClip.startTime)
     } else {
-      // No more clips, stop playback
-      store.setIsPlaying(false)
-      console.log('[Player] Reached end of timeline')
+      // No immediate next clip under playhead: enter gap mode.
+      // Keep playing (timeline clock advances), clear active clip, show black until next clip.
+      activeClipRef.current = null
+      advanceLockUntilRef.current = 0
+      store.setIsPlaying(true)
+      console.log('[Player] No clip under playhead; continuing through gap')
     }
   }
 
@@ -219,8 +256,17 @@ export function Player() {
 
   const { path: currentVideoPath, duration: currentVideoDuration } = getCurrentVideoInfo()
   
-  // Convert absolute path to file:// URL for HTML5 video
-  const videoSrc = currentVideoPath ? `file://${currentVideoPath}` : undefined
+  // During short transitions (auto-advance or play start), lock src briefly to avoid flip-flop
+  const nowMs = Date.now()
+  const lockedSrc = lastSrcRef.current
+  const lockActive = nowMs < advanceLockUntilRef.current
+  const videoSrc = (lockActive && lockedSrc) ? lockedSrc : (currentVideoPath ? `file://${currentVideoPath}` : undefined)
+
+  useEffect(() => {
+    if (!isPlaying) {
+      advanceLockUntilRef.current = 0
+    }
+  }, [isPlaying])
 
   // Update video source and seek when playhead changes
   useEffect(() => {
@@ -242,33 +288,18 @@ export function Player() {
         const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
         const effDur = Math.min(reqDur || 0, clipDur || 0)
         const end = start + (isFinite(effDur) ? effDur : 0)
-        if (t >= start && t <= end) { chosen = { clip, item, start }; break }
+        if (t >= start && t < (end - EPS)) { chosen = { clip, item, start }; break }
       }
       if (chosen) break
     }
 
-    // If nothing under playhead and user is playing, jump to next clip
-    if (!chosen && isPlaying) {
-      let best: { clip: any; item: any; start: number } | null = null
-      for (const track of sortedTracks) {
-        if (!track.visible) continue
-        const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
-        for (const item of items) {
-          const clip = store.clips[item.clipId]
-          if (!clip) continue
-          const start = Number(item.trackPosition) || 0
-          if (start > t && (!best || start < best.start)) best = { clip, item, start }
-        }
-      }
-      if (best) {
-        chosen = best
-        // Align playhead to the next clip start for clarity
-        store.setPlayheadSec(best.start)
-      }
-    }
+    // Do not auto-jump to next clip; gaps are allowed.
 
     if (!chosen) {
-      // No clip to play
+      // No clip to play at this playhead. Stay paused; RAF will advance timeline.
+      activeClipRef.current = null
+      lastSrcRef.current = undefined
+      handledInfinitySrcRef.current = undefined
       video.pause()
       return
     }
@@ -277,9 +308,12 @@ export function Player() {
     const inSec = Number(chosen.item.inSec) || 0
     const seekTime = inSec + Math.max(0, (t - chosen.start))
 
-    // If source changed (e.g., moved to a different clip), update src and align once
-    if (video.src !== neededSrc) {
-      video.src = neededSrc
+    // Only set src when it actually changes to avoid repeated metadata events
+    if (neededSrc && lastSrcRef.current !== neededSrc) {
+      lastSrcRef.current = neededSrc
+      if (video.src !== neededSrc) {
+        video.src = neededSrc
+      }
       video.load()
       if (isFinite(seekTime)) {
         try { video.currentTime = seekTime } catch {}
@@ -291,8 +325,14 @@ export function Player() {
       }
     }
 
-    if (isPlaying && video.paused) {
+    if (isPlaying && activeClipRef.current && video.paused) {
       video.play().catch(() => {})
+    } else if (!activeClipRef.current) {
+      video.pause()
+    }
+
+    if (!isPlaying) {
+      activeClipRef.current = { clipId: chosen.clip.id, itemId: chosen.item.id }
     }
   }, [videoSrc, isPlaying, playheadSec])
 
@@ -310,27 +350,50 @@ export function Player() {
     const step = (now: number) => {
       if (!isPlaying) { return }
       if (now - lastMs >= frameInterval) {
-        const hitClip = getClipAtPlayheadPosition()
-        if (hitClip) {
-          const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
-          outer: for (const track of sortedTracks) {
-            if (!track.visible) continue
-            const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
-            for (const item of items) {
-              const clip = store.clips[item.clipId]
-              if (!clip || clip.id !== hitClip.id) continue
-              const inSec = Number(item.inSec) || 0
-              const start = Number(item.trackPosition) || 0
-              const rel = Math.max(0, video.currentTime - inSec)
-              const mapped = start + rel
-              const nowMs = performance.now()
-              const current = useStore.getState().ui.playheadSec
-              if ((nowMs - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
-                useStore.getState().setPlayheadSec(mapped)
-                lastCommitMs = nowMs
-              }
-              break outer
+        const dtSec = (now - lastMs) / 1000
+        const active = activeClipRef.current
+        if (active) {
+          const item = store.trackItems[active.itemId]
+          const clip = store.clips[active.clipId]
+          if (item && clip) {
+            const inSec = Number(item.inSec) || 0
+            const start = Number(item.trackPosition) || 0
+            const rel = Math.max(0, video.currentTime - inSec)
+            const mapped = start + rel
+            const nowMsPerf = performance.now()
+            const current = useStore.getState().ui.playheadSec
+            if ((nowMsPerf - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
+              useStore.getState().setPlayheadSec(mapped)
+              lastCommitMs = nowMsPerf
             }
+          }
+        } else {
+          const hitClip = getClipAtPlayheadPosition()
+          if (hitClip) {
+            const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
+            outer: for (const track of sortedTracks) {
+              if (!track.visible) continue
+              const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
+              for (const item of items) {
+                const clip = store.clips[item.clipId]
+                if (!clip || clip.id !== hitClip.id) continue
+                const inSec = Number(item.inSec) || 0
+                const start = Number(item.trackPosition) || 0
+                const rel = Math.max(0, video.currentTime - inSec)
+                const mapped = start + rel
+                const nowMsPerf = performance.now()
+                const current = useStore.getState().ui.playheadSec
+                if ((nowMsPerf - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
+                  useStore.getState().setPlayheadSec(mapped)
+                  lastCommitMs = nowMsPerf
+                }
+                break outer
+            }
+            }
+          } else {
+            // Gap: advance timeline clock continuously
+            const current = useStore.getState().ui.playheadSec || 0
+            useStore.getState().setPlayheadSec(current + dtSec)
           }
         }
         lastMs = now
@@ -378,6 +441,12 @@ export function Player() {
       // Handle Chrome's MediaRecorder duration bug for WebM files
       if (video.duration === Infinity) {
         console.log('[Player] Duration is Infinity, applying Chrome MediaRecorder workaround')
+        // Avoid re-applying the workaround repeatedly for the same src
+        if (handledInfinitySrcRef.current === video.src) {
+          console.log('[Player] Workaround already applied for this src; skipping')
+          return
+        }
+        handledInfinitySrcRef.current = video.src
         try {
           // Set currentTime to a large but finite value to force duration calculation
           video.currentTime = 1e6  // 1 million seconds (about 11.5 days)
@@ -420,6 +489,7 @@ export function Player() {
         }
       } else {
         // Normal case - duration is available
+        handledInfinitySrcRef.current = undefined
         if (videoSrc && videoSrc.includes('/recordings/')) {
           const clips = useStore.getState().clips
           const currentClip = Object.values(clips).find(clip => clip.path === videoSrc.replace('file://', ''))
@@ -566,41 +636,35 @@ export function Player() {
         const reqDur = Math.max(0, Number(item.outSec) - Number(item.inSec))
         const effDur = Math.min(reqDur || 0, clipDur || 0)
         const end = start + (isFinite(effDur) ? effDur : 0)
-        if (t >= start && t <= end) { chosen = { clip, item, start }; break }
+        if (t >= start && t < (end - EPS)) { chosen = { clip, item, start }; break }
       }
       if (chosen) break
     }
     if (!chosen) {
-      // find next
-      let best: { clip: any; item: any; start: number } | null = null
-      for (const track of sortedTracks) {
-        if (!track.visible) continue
-        const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
-        for (const item of items) {
-          const clip = store.clips[item.clipId]
-          if (!clip) continue
-          const start = Number(item.trackPosition) || 0
-          if (start > t && (!best || start < best.start)) {
-            best = { clip, item, start }
-          }
-        }
-      }
-      chosen = best
+      // Timeline-first behavior: if starting in a gap, just play the gap (black)
+      activeClipRef.current = null
+      store.setIsPlaying(true)
+      return
     }
-    if (!chosen) { store.setIsPlaying(false); return }
     const neededSrc = `file://${chosen.clip.path}`
-    if (video.src !== neededSrc) {
-      video.src = neededSrc
+    if (lastSrcRef.current !== neededSrc) {
+      lastSrcRef.current = neededSrc
+      if (video.src !== neededSrc) {
+        video.src = neededSrc
+      }
       video.load()
     }
     // If we came from a gap, jump playhead to the start of the next clip and seek to its inSec
     if (t < chosen.start) {
-      store.setPlayheadSec(chosen.start)
+      store.setPlayheadSec(chosen.start + EPS)
     }
-    const seek = (Number(chosen.item.inSec) || 0) + (t >= chosen.start ? (t - chosen.start) : 0)
+    const seek = (Number(chosen.item.inSec) || 0) + (t >= chosen.start ? (t - chosen.start) : EPS)
     try { video.currentTime = seek } catch {}
     store.setIsPlaying(true)
     video.play().catch(() => {})
+    activeClipRef.current = { clipId: chosen.clip.id, itemId: chosen.item.id }
+    // Hold lock briefly to avoid immediate flip-flop during start
+    advanceLockUntilRef.current = Date.now() + 300
   }
 
   const handlePause = () => {
@@ -982,8 +1046,8 @@ export function Player() {
   useEffect(() => {
     if (!videoRef.current) return
     
-    if (isPlaying) {
-      videoRef.current.play()
+    if (isPlaying && activeClipRef.current) {
+      videoRef.current.play().catch(() => {})
     } else {
       videoRef.current.pause()
     }
@@ -1023,6 +1087,10 @@ export function Player() {
               onEnded={handleVideoEnded}
               onTimeUpdate={handleTimeUpdate}
             />
+            {/* Gap overlay: show black screen during timeline gaps */}
+            {isPlaying && !getClipAtPlayheadPosition() && (
+              <div className="absolute inset-0 bg-black/100" style={{ pointerEvents: 'none' }} />
+            )}
             
             {!videoSrc && (
               <p className="text-gray-500">Import a clip to preview</p>

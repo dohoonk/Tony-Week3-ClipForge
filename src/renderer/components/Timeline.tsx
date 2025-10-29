@@ -8,6 +8,7 @@ const MIN_ZOOM = 0.5
 const MAX_ZOOM = 10
 const MIN_TRACK_HEIGHT = 60
 const MAX_TRACK_HEIGHT = 120
+const MIN_SEGMENT_SEC = 0.1
 
 export function Timeline() {
   // Select only what we need; avoid subscribing to playheadSec to prevent rerenders each tick
@@ -17,6 +18,7 @@ export function Timeline() {
   const addTrack = useStore(s => s.addTrack)
   const removeTrack = useStore(s => s.removeTrack)
   const removeTrackItem = useStore(s => s.removeTrackItem)
+  const updateTrackItem = useStore(s => s.updateTrackItem)
   const addClip = useStore(s => s.addClip)
   const removeClip = useStore(s => s.removeClip)
   const moveTrackUp = useStore(s => s.moveTrackUp)
@@ -40,6 +42,62 @@ export function Timeline() {
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastScrollTimeRef = useRef<number>(0)
+  const resizingRef = useRef<{
+    itemId: string
+    edge: 'left' | 'right'
+    startClientX: number
+    startIn: number
+    startOut: number
+    startTrackPos: number
+    clipDuration: number
+  } | null>(null)
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
+
+  const beginResize = (e: React.MouseEvent, itemId: string, edge: 'left' | 'right') => {
+    e.preventDefault()
+    e.stopPropagation()
+    const item = useStore.getState().trackItems[itemId]
+    if (!item) return
+    const clip = useStore.getState().clips[item.clipId]
+    const clipDuration = Number(clip?.duration) || 0
+    resizingRef.current = {
+      itemId,
+      edge,
+      startClientX: e.clientX,
+      startIn: Number(item.inSec) || 0,
+      startOut: Number(item.outSec) || 0,
+      startTrackPos: Number(item.trackPosition) || 0,
+      clipDuration,
+    }
+
+    const onMove = (ev: MouseEvent) => {
+      const r = resizingRef.current
+      if (!r) return
+      const deltaPx = ev.clientX - r.startClientX
+      const deltaSec = deltaPx / pixelsPerSecond
+      if (r.edge === 'left') {
+        const proposedIn = r.startIn + deltaSec
+        const newIn = clamp(proposedIn, 0, r.startOut - MIN_SEGMENT_SEC)
+        const trackDelta = newIn - r.startIn
+        const newTrackPos = clamp(r.startTrackPos + trackDelta, 0, Infinity)
+        updateTrackItem(r.itemId, { inSec: newIn, trackPosition: newTrackPos })
+      } else {
+        const proposedOut = r.startOut + deltaSec
+        const newOut = clamp(proposedOut, (r.startIn + MIN_SEGMENT_SEC), r.clipDuration || (r.startOut + 0))
+        updateTrackItem(r.itemId, { outSec: newOut })
+      }
+    }
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      resizingRef.current = null
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   // Calculate pixels per second based on zoom
   const pixelsPerSecond = BASE_PIXELS_PER_SEC * (zoom || 1)
@@ -598,6 +656,10 @@ export function Timeline() {
         ref={scrollContainerRef}
         className="flex-1 overflow-auto bg-gray-900"
         style={{ contain: 'layout paint' }}
+        onDragOver={handleDragOver}
+        onDragEnter={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onScroll={(e) => {
           const now = Date.now()
           const timeSinceLastScroll = now - lastScrollTimeRef.current
@@ -643,20 +705,16 @@ export function Timeline() {
           onClick={handlePlayheadClick}
         >
         {dragOver && (
-          <div className="absolute inset-0 bg-blue-900 bg-opacity-20 border-2 border-blue-500 border-dashed pointer-events-none">
-            <p className="absolute inset-0 flex items-center justify-center text-blue-400 text-xl font-semibold">
-              Drop clip here
-            </p>
-          </div>
+          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }} />
         )}
 
         {dropGuideTime !== null && (
           <div
-            className="absolute z-40 pointer-events-none"
-            style={{ left: `${dropGuideTime * pixelsPerSecond}px`, top: 0, height: `${Math.max(Object.values(tracks).reduce((t, tr) => t + (tr.height || 80), 0), 400)}px` }}
+            className="absolute pointer-events-none"
+            style={{ zIndex: 9999, left: `${dropGuideTime * pixelsPerSecond}px`, top: 0, height: `${Math.max(Object.values(tracks).reduce((t, tr) => t + (tr.height || 80), 0), 400)}px` }}
           >
-            <div className="absolute w-px h-full bg-blue-400 opacity-80" />
-            <div className="absolute -top-6 -left-6 bg-gray-800 text-blue-300 text-xs font-mono px-2 py-0.5 rounded border border-blue-500">
+            <div className="absolute h-full" style={{ width: '2px', background: '#00e5ff', boxShadow: '0 0 10px 2px rgba(0,229,255,0.8)' }} />
+            <div className="absolute -top-7 -left-8 text-xs font-mono px-2 py-0.5 rounded" style={{ background: '#0b1020', color: '#7dd3fc', border: '1px solid #38bdf8' }}>
               {dropGuideTime.toFixed(1)}s
             </div>
           </div>
@@ -736,7 +794,7 @@ export function Timeline() {
                     return (
                       <div
                         key={item.id}
-                        className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
+                        className="group absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
                         style={{
                           left: `${item.trackPosition * pixelsPerSecond}px`,
                           width: `${itemWidth}px`,
@@ -751,6 +809,21 @@ export function Timeline() {
                         <div className="p-2 text-white text-xs truncate">
                           {clip?.name || 'TrackItem'}
                         </div>
+                        {/* Trim handles */}
+                        <div
+                          className="absolute left-0 top-0 h-full cursor-ew-resize opacity-80 group-hover:opacity-100"
+                          onMouseDown={(e) => beginResize(e, item.id, 'left')}
+                          draggable={false}
+                          title="Trim start"
+                          style={{ width: '10px', background: 'rgba(14, 165, 233, 0.25)', borderRight: '2px solid rgba(255,255,255,0.9)', zIndex: 1000 }}
+                        />
+                        <div
+                          className="absolute top-0 h-full cursor-ew-resize opacity-80 group-hover:opacity-100"
+                          onMouseDown={(e) => beginResize(e, item.id, 'right')}
+                          draggable={false}
+                          title="Trim end"
+                          style={{ left: 'calc(100% - 12px)', width: '12px', background: 'rgba(14, 165, 233, 0.28)', borderLeft: '2px solid rgba(255,255,255,0.95)', zIndex: 1000, pointerEvents: 'auto' }}
+                        />
                       </div>
                     )
                   })}

@@ -180,88 +180,122 @@ export class FFmpegWrapper extends EventEmitter {
         }
         command.input(clip.path)
       }
-      
-      // Build filter_complex string:
-      // For each trackItem: trim + setpts (offset by trackPosition)
-      const filterParts: string[] = []
-      const videoConcatInputs: string[] = []
-      const audioConcatInputs: string[] = []
-      
-      // Map clip inputs by their index
-      const clipIndexMap: Record<string, number> = {}
-      let inputIndex = 0
-      
-      for (const clipId of uniqueClipIds) {
-        clipIndexMap[clipId] = inputIndex++
-      }
-      
-      // Generate trim filters for each trackItem
-      let streamIndex = 0
-      for (const item of sortedItems) {
-        const itemData = item as any
-        const clip = clips[itemData.clipId]
-        if (!clip) continue
+      // Determine audio presence per input
+      const clipHasAudio: Record<string, boolean> = {}
+      let hasAnyAudio = false
+      let remaining = uniqueClipIds.length
+      const afterProbe = () => {
+        // Build filter_complex string:
+        // For each trackItem: trim + setpts (offset by trackPosition)
+        const filterParts: string[] = []
+        const videoConcatInputs: string[] = []
+        const audioConcatInputs: string[] = []
         
-        const inputIndex = clipIndexMap[itemData.clipId]
+        // Map clip inputs by their index
+        const clipIndexMap: Record<string, number> = {}
+        let inputIndex = 0
+        for (const clipId of uniqueClipIds) {
+          clipIndexMap[clipId] = inputIndex++
+        }
         
-        // Calculate trim: [inSec, outSec]
-        // Then offset by trackPosition for placement
-        const inSec = itemData.inSec || 0
-        const outSec = itemData.outSec || clip.duration
-        const position = itemData.trackPosition || 0
+        // Generate trim filters for each trackItem
+        let streamIndex = 0
+        for (const item of sortedItems) {
+          const itemData = item as any
+          const clip = clips[itemData.clipId]
+          if (!clip) continue
+          
+          const inputIndex = clipIndexMap[itemData.clipId]
+          
+          // Calculate trim: [inSec, outSec]
+          // Then offset by trackPosition for placement
+          const inSec = itemData.inSec || 0
+          const outSec = itemData.outSec || clip.duration
+          const position = itemData.trackPosition || 0
+          
+          // Trim video and audio
+          const videoLabel = `v${streamIndex}`
+          const audioLabel = `a${streamIndex}`
+          
+          // Video filter
+          filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${videoLabel}]`)
+          videoConcatInputs.push(`[${videoLabel}]`)
+          
+          // Audio filter (only if inputs have audio)
+          if (hasAnyAudio && clipHasAudio[itemData.clipId]) {
+            filterParts.push(`[${inputIndex}:a]atrim=${inSec}:${outSec},asetpts=PTS-STARTPTS+${position}/TB[${audioLabel}]`)
+            audioConcatInputs.push(`[${audioLabel}]`)
+          }
+          
+          streamIndex++
+        }
         
-        // Trim video and audio
-        const videoLabel = `v${streamIndex}`
-        const audioLabel = `a${streamIndex}`
-        
-        // Video filter
-        filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${videoLabel}]`)
-        videoConcatInputs.push(`[${videoLabel}]`)
-        
-        // Audio filter
-        filterParts.push(`[${inputIndex}:a]atrim=${inSec}:${outSec},asetpts=PTS-STARTPTS+${position}/TB[${audioLabel}]`)
-        audioConcatInputs.push(`[${audioLabel}]`)
-        
-        streamIndex++
-      }
-      
-      // Concatenate all trimmed segments (video and audio)
-      if (videoConcatInputs.length > 0) {
-        filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[outv]`)
-        filterParts.push(`${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[outa]`)
-        
-        const filterComplex = filterParts.join(';')
-        console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
-        
-        command
-          .complexFilter(filterComplex)
-          .outputOptions(['-map [outv]'])
-          .outputOptions(['-map [outa]'])
-          .outputOptions(['-c:v libx264', '-preset veryfast', '-crf 20'])
-          .outputOptions(['-c:a aac', '-b:a 192k'])
-          .on('start', (cmdline) => {
-            console.log('[FFmpeg] Export started:', cmdline)
-          })
-          .on('progress', (progress) => {
-            // Emit progress updates
-            const percent = progress.percent || 0
-            this.emit('export:progress', { 
-              progress: percent, 
-              timemark: progress.timemark || '0:00:00'
+        // Concatenate all trimmed segments (video and audio)
+        if (videoConcatInputs.length > 0) {
+          filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[outv]`)
+          const audioUsable = hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length
+          if (audioUsable) {
+            filterParts.push(`${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[outa]`)
+          } else if (hasAnyAudio && audioConcatInputs.length !== videoConcatInputs.length) {
+            console.warn('[FFmpeg] Skipping audio concat due to mismatched segment counts:', {
+              videoSegments: videoConcatInputs.length,
+              audioSegments: audioConcatInputs.length,
             })
+          }
+          
+          const filterComplex = filterParts.join(';')
+          console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
+          
+          command
+            .complexFilter(filterComplex)
+            .outputOptions(['-map [outv]'])
+            .outputOptions((hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length) ? ['-map [outa]'] : ['-an'])
+            .outputOptions(['-c:v libx264', '-preset veryfast', '-crf 20'])
+            .outputOptions((hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length) ? ['-c:a aac', '-b:a 192k'] : [])
+            .on('start', (cmdline) => {
+              console.log('[FFmpeg] Export started:', cmdline)
+            })
+            .on('progress', (progress) => {
+              // Emit progress updates
+              const percent = progress.percent || 0
+              this.emit('export:progress', { 
+                progress: percent, 
+                timemark: progress.timemark || '0:00:00'
+              })
+            })
+            .on('end', () => {
+              console.log('[FFmpeg] Export completed')
+              this.emit('export:end', { outputPath })
+              resolve()
+            })
+            .on('error', (err) => {
+              console.error('[FFmpeg] Export error:', err)
+              reject(err)
+            })
+            .save(outputPath)
+        } else {
+          reject(new Error('No valid track items found'))
+        }
+      }
+      
+      if (uniqueClipIds.length === 0) {
+        reject(new Error('No inputs'))
+        return
+      }
+      for (const clipId of uniqueClipIds) {
+        const clip = clips[clipId]
+        if (!clip) { if (--remaining === 0) afterProbe(); continue }
+        try {
+          ffmpeg(clip.path).ffprobe((err, md) => {
+            const has = !err && (md?.streams || []).some((s: any) => s.codec_type === 'audio')
+            clipHasAudio[clipId] = !!has
+            if (has) hasAnyAudio = true
+            if (--remaining === 0) afterProbe()
           })
-          .on('end', () => {
-            console.log('[FFmpeg] Export completed')
-            this.emit('export:end', { outputPath })
-            resolve()
-          })
-          .on('error', (err) => {
-            console.error('[FFmpeg] Export error:', err)
-            reject(err)
-          })
-          .save(outputPath)
-      } else {
-        reject(new Error('No valid track items found'))
+        } catch {
+          clipHasAudio[clipId] = false
+          if (--remaining === 0) afterProbe()
+        }
       }
     })
   }

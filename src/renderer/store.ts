@@ -32,6 +32,7 @@ interface ClipForgeActions {
   // TrackItem actions
   addTrackItem: (item: any) => void
   removeTrackItem: (itemId: string) => void
+  updateTrackItem: (itemId: string, updates: Partial<any>) => void
   
   // UI actions
   setPlayheadSec: (seconds: number) => void
@@ -167,6 +168,10 @@ export const useStore = create<ClipForgeStore>((set) => ({
     const { [itemId]: _, ...trackItems } = state.trackItems
     return { trackItems }
   }),
+  
+  updateTrackItem: (itemId: string, updates: Partial<any>) => set((state) => ({
+    trackItems: { ...state.trackItems, [itemId]: { ...state.trackItems[itemId], ...updates } }
+  })),
   
   setPlayheadSec: (seconds: number) => set((state) => ({
     ui: { ...state.ui, playheadSec: seconds }
