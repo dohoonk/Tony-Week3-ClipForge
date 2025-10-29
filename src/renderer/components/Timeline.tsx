@@ -836,39 +836,39 @@ export function Timeline() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleSaveProject}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded font-medium"
+              className="btn btn-primary btn-sm"
             >
               💾 Save Project
             </button>
             <button
               onClick={handleLoadProject}
-              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded font-medium"
+              className="btn btn-secondary btn-sm"
             >
               📁 Load Project
             </button>
             <button
               onClick={handlePlayPause}
-              className={`px-3 py-1 rounded text-sm font-medium ${
+              className={`btn btn-sm ${
                 isPlaying 
-                  ? 'bg-red-600 hover:bg-red-700 text-white' 
-                  : 'bg-green-600 hover:bg-green-700 text-white'
+                  ? 'btn-danger' 
+                  : 'btn-success'
               }`}
             >
               {isPlaying ? '⏸ Pause' : '▶ Play'}
             </button>
             <button
               onClick={handleSplit}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded font-medium"
+              className="btn btn-purple btn-sm"
               title="Split clip at playhead position"
             >
               ✂ Split
             </button>
             <button
               onClick={() => setSnapEnabled(!snapEnabled)}
-              className={`px-3 py-1 text-sm rounded font-medium transition-colors ${
+              className={`btn btn-sm ${
                 snapEnabled
-                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                  : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
+                  ? 'btn-warning'
+                  : 'btn-secondary'
               }`}
               title={`Snap ${snapEnabled ? 'enabled' : 'disabled'} (${snapInterval}s grid${snapToEdges ? ', edges' : ''})`}
             >
@@ -884,7 +884,7 @@ export function Timeline() {
         <div className="flex items-center gap-2 mb-2">
           <button
             onClick={handleAddTrack}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded font-medium"
+            className="btn btn-primary btn-sm"
           >
             + Add Track
           </button>

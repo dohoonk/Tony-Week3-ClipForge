@@ -87,7 +87,7 @@ export function ExportPanel() {
   }
 
   return (
-    <aside className="w-64 h-full border-l border-gray-700 p-4 overflow-auto" style={{ minWidth: '200px', flexShrink: 0 }}>
+    <aside className="panel w-64 h-full" style={{ minWidth: '200px', flexShrink: 0 }}>
       <h2 className="text-lg font-semibold mb-4 text-white">Export Panel</h2>
       
       <div className="space-y-4">
@@ -106,7 +106,7 @@ export function ExportPanel() {
             value={resolution}
             onChange={(e) => setResolution(e.target.value as ExportResolution)}
             disabled={isExporting}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full select"
           >
             <option value="720p">720p (1280x720)</option>
             <option value="1080p">1080p (1920x1080)</option>
@@ -118,9 +118,9 @@ export function ExportPanel() {
         {isExporting && (
           <div className="space-y-2">
             <p className="text-xs text-gray-300">{exportStatus || 'Exporting...'}</p>
-            <div className="w-full bg-gray-700 rounded-full h-3">
+            <div className="progress-container">
               <div 
-                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                className="progress-bar"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -146,10 +146,10 @@ export function ExportPanel() {
         <button 
           onClick={handleExport}
           disabled={isExporting || trackItemsCount === 0}
-          className={`w-full px-4 py-2 rounded text-white font-medium transition-all ${
+          className={`w-full btn ${
             isExporting || trackItemsCount === 0
-              ? 'bg-gray-600 cursor-not-allowed opacity-50'
-              : 'bg-green-600 hover:bg-green-700'
+              ? 'btn-secondary'
+              : 'btn-success'
           }`}
         >
           {isExporting ? '⏳ Exporting...' : '📤 Export Video'}

@@ -195,7 +195,7 @@ export function MediaLibrary() {
 
   return (
     <aside 
-      className={`w-64 h-full border-r border-gray-700 bg-gray-900 flex flex-col transition-colors ${
+      className={`w-64 h-full border-r border-gray-700 bg-gray-900 flex flex-col transition-all duration-200 ${
         isDragOver ? 'bg-blue-900/20 border-blue-500' : ''
       }`}
       onDragOver={handleDragOver}
@@ -209,7 +209,7 @@ export function MediaLibrary() {
           <button
             onClick={handleImportFiles}
             disabled={isImporting}
-            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-white"
+            className="btn btn-primary btn-sm"
           >
             {isImporting ? 'Importing...' : 'Import'}
           </button>
@@ -242,7 +242,7 @@ export function MediaLibrary() {
           clipList.map((clip) => (
             <div
               key={clip.id}
-              className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors group cursor-move relative"
+              className="card card-interactive p-3 group relative"
               draggable
               onDragStart={(e) => {
                 handleDragStart(e, clip.id)
@@ -276,7 +276,7 @@ export function MediaLibrary() {
                     e.stopPropagation()
                     handleDeleteClip(clip.id)
                   }}
-                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-7 h-7 flex items-center justify-center transition-opacity text-sm z-10 shadow-lg"
+                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-full w-7 h-7 flex items-center justify-center transition-all duration-200 text-sm z-10 shadow-lg hover:scale-110"
                   title="Delete clip"
                 >
                   ×
@@ -294,7 +294,7 @@ export function MediaLibrary() {
                       e.stopPropagation()
                       handleDeleteClip(clip.id)
                     }}
-                    className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                    className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded transition-all duration-200"
                     title="Delete clip from library"
                   >
                     ✕

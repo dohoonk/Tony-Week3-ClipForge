@@ -1089,9 +1089,9 @@ export function Player() {
   }, [isPlaying])
 
   return (
-    <div className="flex flex-col bg-gray-900 border-b border-gray-700" style={{ maxHeight: '300px' }}>
+    <div className="flex flex-col h-full bg-gray-900 border-b border-gray-700">
       {/* Video Player */}
-      <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ height: '280px', width: '100%' }}>
+      <div className="flex-1 relative bg-black flex items-center justify-center min-h-[200px] overflow-hidden" style={{ width: '100%' }}>
         {recordingType === 'webcam' && webcamStream ? (
           <video
             ref={setWebcamPreviewRef}
@@ -1134,39 +1134,43 @@ export function Player() {
         )}
       </div>
 
-      {/* Controls */}
+      {/* Controls - Hidden for now */}
+      {false && (
+        <div className="p-4 bg-gray-800 border-t border-gray-700">
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={handlePlay}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium"
+            >
+              ▶ Play
+            </button>
+            <button
+              onClick={handlePause}
+              className="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-medium"
+            >
+              ⏸ Pause
+            </button>
+            <button
+              onClick={handleToggleLoop}
+              className={`px-6 py-2 rounded font-medium ${
+                loopEnabled
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
+            >
+              🔁 Loop
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Recording Controls */}
       <div className="p-4 bg-gray-800 border-t border-gray-700">
         <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={handlePlay}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium"
-          >
-            ▶ Play
-          </button>
-          <button
-            onClick={handlePause}
-            className="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-medium"
-          >
-            ⏸ Pause
-          </button>
-          <button
-            onClick={handleToggleLoop}
-            className={`px-6 py-2 rounded font-medium ${
-              loopEnabled
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : 'bg-gray-600 hover:bg-gray-700 text-white'
-            }`}
-          >
-            🔁 Loop
-          </button>
-        </div>
-        
-        {/* Recording Controls */}
-        <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-700">
           <select
             value={recordingType}
             onChange={(e) => handleRecordingTypeChange(e.target.value as 'screen' | 'webcam' | 'pip')}
-            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+            className="select"
             disabled={isRecording || countdown !== null}
           >
             <option value="screen">Screen</option>
@@ -1181,7 +1185,7 @@ export function Player() {
               </div>
               <button
                 onClick={handleCancelCountdown}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-medium"
+                className="btn btn-secondary btn-sm"
               >
                 Cancel
               </button>
@@ -1189,7 +1193,7 @@ export function Player() {
           ) : !isRecording ? (
             <button
               onClick={handleStartRecording}
-              className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded text-white font-medium"
+              className="btn btn-danger btn-sm"
             >
               🔴 Start Recording
             </button>
@@ -1201,7 +1205,7 @@ export function Player() {
           ) : (
             <button
               onClick={handleStopRecording}
-              className="px-6 py-2 bg-red-800 hover:bg-red-900 rounded text-white font-medium animate-pulse"
+              className="btn btn-danger btn-sm animate-pulse-subtle"
             >
               ⏹ Stop Recording
             </button>
@@ -1214,39 +1218,51 @@ export function Player() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Camera Selection */}
               <div>
-                <label className="block text-sm text-gray-300 mb-2">Camera:</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Camera:</label>
                 <select
                   value={selectedCameraId}
                   onChange={(e) => setSelectedCameraId(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  className="w-full select"
                   disabled={isRecording || countdown !== null}
                 >
                   {availableDevices
                     .filter(device => device.kind === 'videoinput')
-                    .map(device => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
+                    .length === 0 ? (
+                    <option value="">No cameras found</option>
+                  ) : (
+                    availableDevices
+                      .filter(device => device.kind === 'videoinput')
+                      .map(device => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))
+                  )}
                 </select>
               </div>
               
               {/* Microphone Selection */}
               <div>
-                <label className="block text-sm text-gray-300 mb-2">Microphone:</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Microphone:</label>
                 <select
                   value={selectedMicrophoneId}
                   onChange={(e) => setSelectedMicrophoneId(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                  className="w-full select"
                   disabled={isRecording || countdown !== null}
                 >
                   {availableDevices
                     .filter(device => device.kind === 'audioinput')
-                    .map(device => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
+                    .length === 0 ? (
+                    <option value="">No microphones found</option>
+                  ) : (
+                    availableDevices
+                      .filter(device => device.kind === 'audioinput')
+                      .map(device => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))
+                  )}
                 </select>
               </div>
             </div>
