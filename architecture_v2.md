@@ -3,17 +3,17 @@
 ## 0) Context & Goals
 Build a professional desktop video editor with multi-track timeline, real recording capabilities, effects system, and export queue management. Extend the v1 MVP with advanced features while maintaining performance and stability.
 
-**Key v2 additions:** Multi-track support, PiP recording, text overlays, transitions, export presets, undo/redo, onboarding experience.
+**Key v2 additions:** Multi-track support, PiP recording, text overlays, transitions, export presets, undo/redo, onboarding experience, AI filler removal.
 
 ---
 
 ## 1) High-Level Architecture
 
 **Process topology**
-- **Electron Main (Node):** App lifecycle, window, menus, dialogs, secure IPC, project I/O, **fluent-ffmpeg** library invocation, **recording service**, **export queue manager**.
-- **Preload (ContextBridge):** Extended API surface with recording, effects, and queue management.
-- **Renderer (React + TS):** Multi-track UI, state management, preview compositor, recording orchestration, effects system.
-- **External binaries:** Bundled `ffmpeg` & `ffprobe` in `process.resourcesPath/bin/` (macOS).
+- **Electron Main (Node):** App lifecycle, window, menus, dialogs, secure IPC, project I/O, **fluent-ffmpeg** library invocation, **recording service**, **export queue manager**, **whisper runner**, **transcript cache**.
+- **Preload (ContextBridge):** Extended API surface with recording, effects, queue management, and AI transcription.
+- **Renderer (React + TS):** Multi-track UI, state management, preview compositor, recording orchestration, effects system, AI assistant panel.
+- **External binaries:** Bundled `ffmpeg` & `ffprobe` in `process.resourcesPath/bin/`, `whisper.cpp` in `process.resourcesPath/bin/whisper/`, model files in `process.resourcesPath/models/whisper/`.
 
 **Key principles**
 - **Multi-track state:** Flat `trackItems` with `trackId` for undo/redo compatibility
@@ -42,6 +42,10 @@ Build a professional desktop video editor with multi-track timeline, real record
 - **Recording Service:** MediaRecorder wrapper with PiP muxing
 - **Export Queue:** Job management with persistence
 - **Effects System:** CSS preview + FFmpeg export
+- **Whisper Runner:** Local speech-to-text via Whisper.cpp
+- **Transcript Cache:** File-hash based caching for transcripts
+- **Filler Detection:** Pure functions for filler word detection
+- **Cut Plan Generator:** Timeline mutation planner (pure function)
 
 ---
 
@@ -123,9 +127,85 @@ class RecordingService {
 
 ---
 
-## 5) Effects & Preview System
+## 5) AI Assistant System
 
-### 5.1 Dual-Tier Preview
+### 5.1 Whisper Integration
+```typescript
+class WhisperRunner extends EventEmitter {
+  transcribe(audioPath: string, modelPath: string): Promise<Transcript>
+  // Emits 'progress' events during transcription
+}
+
+// Transcript cache
+class TranscriptCache {
+  getCachedTranscript(hash: string): Promise<Transcript | null>
+  setCachedTranscript(hash: string, transcript: Transcript): Promise<void>
+  invalidateTranscript(hash: string): Promise<void>
+}
+```
+
+### 5.2 Transcription Pipeline
+1. **Audio Extraction:** FFmpeg converts video → 16kHz mono WAV
+2. **Whisper Processing:** `whisper -m ggml-base.en.bin -f temp.wav -ofjson -pp -l en`
+3. **JSON Parsing:** Extract word-level timestamps with confidence scores
+4. **Cache Storage:** Save to `~/.clipforge/cache/transcripts/{hash}.json`
+5. **Progress Events:** Emit IPC events for UI progress bar
+
+### 5.3 Filler Detection
+```typescript
+// Pure function in src/shared/ai/
+function detectFillerSpans(
+  transcript: Transcript,
+  options?: { confMin?: number; padMs?: number }
+): FillerSpan[]
+
+// Filler dictionary
+const FILLERS = ["um", "uh", "like", "you know", "so", "actually", "well"]
+
+// Returns padded spans (±40ms) with merge logic (≤120ms gaps)
+```
+
+### 5.4 Cut Plan Generation
+```typescript
+// Pure function - no side effects, fully testable
+function generateCutPlan(
+  trackItems: TrackItem[],
+  fillerSpans: FillerSpan[],
+  options?: { rippleGapMs?: number }
+): CutPlan[]
+
+// Respects existing trim bounds (inSec/outSec)
+// Maps clip-relative times to timeline-relative
+// Applies ripple tighten (merge gaps < snapInterval)
+```
+
+### 5.5 Timeline Application
+```typescript
+// Store mutation with undo snapshot
+function applyCutPlanToStore(cutPlan: CutPlan[]): void {
+  // 1. Snapshot current trackItems
+  // 2. Split items according to cuts
+  // 3. Batch mutations (add fragments, remove originals)
+  // 4. Adjust playhead if needed
+  // 5. Store snapshot for undo
+}
+```
+
+### 5.6 File Hash Calculation
+```typescript
+// Calculated at file ingest time
+function calculateClipHash(fileBuffer: Buffer): string {
+  return crypto.createHash('sha1').update(fileBuffer).digest('hex')
+}
+
+// Stored in Clip.hash for cache lookup
+```
+
+---
+
+## 6) Effects & Preview System
+
+### 6.1 Dual-Tier Preview
 **Tier 1 - Real-time Preview:**
 - WebGL compositor using OffscreenCanvas
 - CSS filters for color adjustments
@@ -138,7 +218,7 @@ class RecordingService {
 - Switched automatically for performance
 - Target: ≥55 fps for complex projects
 
-### 5.2 Effects Pipeline
+### 6.2 Effects Pipeline
 ```typescript
 // Preview (CSS/WebGL)
 const previewEffects = {
@@ -155,7 +235,7 @@ const exportFilters = {
 }
 ```
 
-### 5.3 Text Overlays
+### 6.3 Text Overlays
 ```typescript
 type TextOverlay = {
   id: string
@@ -172,9 +252,9 @@ type TextOverlay = {
 
 ---
 
-## 6) Export Queue System
+## 7) Export Queue System
 
-### 6.1 Job Management
+### 7.1 Job Management
 ```typescript
 type ExportJob = {
   id: string
@@ -195,7 +275,7 @@ class ExportQueue {
 }
 ```
 
-### 6.2 Export Presets
+### 7.2 Export Presets
 ```typescript
 const presets = {
   youtube: {
@@ -222,7 +302,7 @@ const presets = {
 }
 ```
 
-### 6.3 Queue Persistence
+### 7.3 Queue Persistence
 - Jobs saved to `~/.clipforge/queue.json`
 - Auto-resume on app startup
 - Crash recovery for interrupted exports
@@ -230,21 +310,21 @@ const presets = {
 
 ---
 
-## 7) Performance Optimizations
+## 8) Performance Optimizations
 
-### 7.1 Timeline Performance
+### 8.1 Timeline Performance
 - **Virtualization:** Only visible track items render
 - **Scroll throttling:** 30fps updates for smooth scrolling
 - **GPU transforms:** Hardware-accelerated playhead movement
 - **Memory management:** Cleanup unused track items
 
-### 7.2 Preview Performance
+### 8.2 Preview Performance
 - **WebGL compositor:** Hardware-accelerated rendering
 - **Proxy media:** 540p proxies for heavy timelines
 - **Effect caching:** Pre-computed filter chains
 - **Frame dropping:** Adaptive quality based on performance
 
-### 7.3 Export Performance
+### 8.3 Export Performance
 - **Single-pass encoding:** All effects in one FFmpeg process
 - **Hardware acceleration:** Use available GPU codecs
 - **Progress optimization:** Throttled progress updates
@@ -252,7 +332,7 @@ const presets = {
 
 ---
 
-## 8) Component Diagram v2
+## 9) Component Diagram v2
 
 ```mermaid
 flowchart TD
@@ -264,6 +344,8 @@ M4[FFmpeg Wrapper]
 M5[Project I/O]
 M6[Recording Service]
 M7[Export Queue Manager]
+M8[Whisper Runner]
+M9[Transcript Cache]
 end
 
 subgraph Preload[Preload Bridge]
@@ -271,6 +353,7 @@ P1[window.clipforge/*]
 P2[Recording API]
 P3[Effects API]
 P4[Queue API]
+P5[AI Transcription API]
 end
 
 subgraph Renderer[React + TS]
@@ -282,6 +365,7 @@ R5[Effects Panel]
 R6[Export Queue UI]
 R7[Project Store]
 R8[Undo/Redo System]
+R9[AI Assistant Panel]
 end
 
 subgraph OS[macOS Services]
@@ -289,20 +373,23 @@ OS1[File System]
 OS2[Camera/Microphone]
 OS3[Screen Capture]
 OS4[WebGL/GPU]
+OS5[Whisper Binary]
 end
 
-M1 --> M2 --> P1 --> R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8
+M1 --> M2 --> P1 --> R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9
 R1 <-->|import| P1 --> M3 --> OS1
 R4 -->|record| P2 --> M6 --> OS2 & OS3
 R5 -->|effects| P3 --> M4 --> OS1
 R6 -->|export| P4 --> M7 --> M4 --> OS1
+R9 -->|transcribe| P5 --> M8 --> OS5
+R9 -->|cache| P5 --> M9 --> OS1
 R3 -->|preview| OS4
 R8 -->|history| R7
 ```
 
 ---
 
-## 9) Data Flow Examples
+## 10) Data Flow Examples
 
 ### 9.1 Multi-Track Editing
 1. User drags clip to timeline
@@ -325,9 +412,20 @@ R8 -->|history| R7
 4. Includes `drawtext` filter for text
 5. Single-pass encode with all effects
 
+### 9.4 AI Filler Removal Pipeline
+1. User selects clip in media library
+2. Click "Analyze Speech" → Extract audio to 16kHz WAV
+3. Whisper.cpp transcribes with word-level timestamps
+4. Transcript cached by file hash in `~/.clipforge/cache/transcripts/`
+5. Filler detection scans transcript for filler words
+6. User previews detected fillers, adjusts confidence threshold
+7. Generate cut plan (pure function, respects existing trims)
+8. Apply cuts to timeline (batched mutations, single undo entry)
+9. Playhead adjusted if inside removed region
+
 ---
 
-## 10) IPC Surface Extensions
+## 11) IPC Surface Extensions
 
 ```typescript
 // Existing v1 API
@@ -347,11 +445,19 @@ getExportQueue(): Promise<ExportJob[]>
 cancelExportJob(jobId: string): Promise<void>
 undo(): Promise<void>
 redo(): Promise<void>
+
+// AI Assistant API
+transcribeClip(clipId: string): Promise<Transcript>
+onTranscribeProgress(callback: (data: { clipId: string; progress: number }) => void): void
+detectFillers(clipId: string, options?: { confMin?: number }): Promise<FillerSpan[]>
+generateCutPlan(trackItems: TrackItem[], fillerSpans: FillerSpan[], options?: { rippleGapMs?: number }): Promise<CutPlan[]>
+applyCutPlan(cutPlan: CutPlan[]): Promise<void>
+undoLastAICuts(): Promise<void>
 ```
 
 ---
 
-## 11) Performance Targets
+## 12) Performance Targets
 
 | Metric | v1 Target | v2 Target |
 |--------|-----------|-----------|
@@ -364,7 +470,15 @@ redo(): Promise<void>
 
 ---
 
-## 12) Risk Mitigation
+## 13) Risk Mitigation
+
+| Risk | v1 Mitigation | v2 Mitigation |
+|------|----------------|---------------|
+| Whisper binary missing | Path resolution + error handling | Graceful degradation, user-friendly errors |
+| Transcription timeout | Progress tracking | Timeout handling, retry mechanism |
+| Large file processing | Cache system | Hash-based cache, avoid re-transcription |
+| Filler detection accuracy | Confidence threshold | User-adjustable slider, preview before apply |
+| Timeline mutation errors | Pure cut plan function | Undo snapshot, batch mutations |
 
 | Risk | v1 Mitigation | v2 Mitigation |
 |------|----------------|---------------|
@@ -376,9 +490,9 @@ redo(): Promise<void>
 
 ---
 
-## 13) Acceptance Criteria v2
+## 14) Acceptance Criteria v2
 
-### 13.1 Core Features
+### 14.1 Core Features
 - [ ] Multi-track timeline with drag-drop between tracks
 - [ ] Screen + webcam recording with PiP
 - [ ] Text overlays with animations
@@ -386,24 +500,35 @@ redo(): Promise<void>
 - [ ] Export queue with presets
 - [ ] Undo/redo system (50 actions)
 - [ ] Onboarding tour for new users
+- [ ] AI filler removal:
+  - [ ] Local Whisper.cpp transcription
+  - [ ] Transcript caching by file hash
+  - [ ] Filler detection with confidence threshold
+  - [ ] Preview and selective removal
+  - [ ] Timeline cuts respect existing trims
+  - [ ] Single undo for AI edits
 
-### 13.2 Performance
+### 14.2 Performance
 - [ ] Timeline rendering: ≥55 fps with 5+ tracks
 - [ ] Preview with effects: ≥30 fps
 - [ ] Export speed: ≤1.3× realtime for 1080p30
 - [ ] Memory usage: <2GB for typical projects
 - [ ] Startup time: <3 seconds
+- [ ] AI transcription: Non-blocking UI, progress updates
+- [ ] Transcript cache: Instant lookup for previously transcribed clips
 
-### 13.3 User Experience
+### 14.3 User Experience
 - [ ] Recording setup: <30 seconds
 - [ ] Timeline editing: Intuitive multi-track workflow
 - [ ] Export workflow: <5 clicks to export
 - [ ] Error recovery: Graceful degradation
 - [ ] Onboarding: Complete tour in <2 minutes
+- [ ] AI workflow: Analyze → Preview → Apply in <5 clicks
+- [ ] Filler detection: Confidence threshold adjustment with real-time updates
 
 ---
 
-## 14) Implementation Phases
+## 15) Implementation Phases
 
 ### Phase 1: Multi-Track Foundation
 - Track management in Zustand store
@@ -429,16 +554,30 @@ redo(): Promise<void>
 - Undo/redo implementation
 - Onboarding experience
 
+### Phase 5: AI Assistant
+- Whisper.cpp integration and binary bundling
+- Transcript cache system
+- Filler detection algorithms
+- Cut plan generation (pure functions)
+- Timeline mutation application
+- AI Assistant UI panel
+
 ---
 
-## 15) Future Considerations
+## 16) Future Considerations
 
-### 15.1 Advanced Features
+### 16.1 Advanced Features
 - LUT color grading
 - Motion-tracked text
 - GPU-accelerated filters
 - Real-time collaboration
 - Cloud project sync
+- AI enhancements:
+  - Multiple language support
+  - Custom filler word dictionaries
+  - Advanced confidence analysis
+  - Batch processing across multiple clips
+  - MCP server for AI agent integration
 
 ### 15.2 Platform Expansion
 - Windows support
