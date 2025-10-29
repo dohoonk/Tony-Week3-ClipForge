@@ -101,11 +101,11 @@
 - [x] Show import progress/feedback
 
 ### PR 23.4: clip-split-at-playhead
-- [ ] Add "Split" button to timeline controls
-- [ ] Split clip at current playhead position
-- [ ] Create two track items from one (left/right halves)
-- [ ] Update inSec/outSec for split clips
-- [ ] Maintain clip references correctly
+- [x] Add "Split" button to timeline controls
+- [x] Split clip at current playhead position
+- [x] Create two track items from one (left/right halves)
+- [x] Update inSec/outSec for split clips
+- [x] Maintain clip references correctly
 
 ### PR 23.5: snap-to-grid-edges
 - [ ] Implement snap-to-grid (e.g., 0.5s intervals)

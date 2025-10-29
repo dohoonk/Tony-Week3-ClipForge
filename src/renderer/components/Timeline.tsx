@@ -611,6 +611,110 @@ export function Timeline() {
     }
   }, [])
 
+  // Split clip at playhead position
+  const handleSplit = () => {
+    const playheadSec = useStore.getState().ui.playheadSec || 0
+    
+    // Find the track item that contains the playhead
+    // Sort tracks by order (lower order = top track)
+    const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+    let itemToSplit: any = null
+    const EPS = 0.005 // Small epsilon for boundary checks
+    
+    // Search from top track to bottom (prioritize topmost clip)
+    for (const track of sortedTracks) {
+      if (!track.visible) continue
+      
+      const items = Object.values(trackItems).filter(item => item.trackId === track.id)
+      
+      for (const item of items) {
+        const clip = useStore.getState().clips[item.clipId]
+        if (!clip) continue
+        
+        const itemStart = Number(item.trackPosition) || 0
+        const itemDuration = Number(item.outSec) - Number(item.inSec)
+        const itemEnd = itemStart + itemDuration
+        
+        // Check if playhead is within this item's timeline range
+        if (playheadSec >= itemStart + EPS && playheadSec < itemEnd - EPS) {
+          itemToSplit = item
+          break
+        }
+      }
+      
+      if (itemToSplit) break
+    }
+    
+    if (!itemToSplit) {
+      alert('No clip found at playhead position. Position the playhead on a clip to split.')
+      return
+    }
+    
+    const clip = useStore.getState().clips[itemToSplit.clipId]
+    if (!clip) {
+      console.error('[Timeline] Clip not found for item:', itemToSplit.clipId)
+      return
+    }
+    
+    // Calculate split point relative to clip source
+    const itemStart = Number(itemToSplit.trackPosition) || 0
+    const inSec = Number(itemToSplit.inSec) || 0
+    const outSec = Number(itemToSplit.outSec) || 0
+    
+    // Time offset within the clip segment at playhead position
+    const offsetInSegment = playheadSec - itemStart
+    
+    // Split point in clip's source time (inSec to outSec range)
+    const splitPointInClip = inSec + offsetInSegment
+    
+    // Validate split point is within clip bounds
+    if (splitPointInClip <= inSec + EPS || splitPointInClip >= outSec - EPS) {
+      alert('Cannot split at clip edge. Move playhead to the middle of the clip.')
+      return
+    }
+    
+    // Ensure minimum segment duration
+    const leftDuration = splitPointInClip - inSec
+    const rightDuration = outSec - splitPointInClip
+    
+    if (leftDuration < MIN_SEGMENT_SEC || rightDuration < MIN_SEGMENT_SEC) {
+      alert(`Cannot split: resulting segments would be too short (minimum ${MIN_SEGMENT_SEC}s).`)
+      return
+    }
+    
+    // Create left half
+    const leftItem = {
+      id: `trackitem-${Date.now()}-${Math.random()}`,
+      clipId: itemToSplit.clipId,
+      trackId: itemToSplit.trackId,
+      inSec: inSec,
+      outSec: splitPointInClip,
+      trackPosition: itemStart,
+    }
+    
+    // Create right half
+    const rightItem = {
+      id: `trackitem-${Date.now()}-${Math.random()}`,
+      clipId: itemToSplit.clipId,
+      trackId: itemToSplit.trackId,
+      inSec: splitPointInClip,
+      outSec: outSec,
+      trackPosition: playheadSec, // Start at split point
+    }
+    
+    // Remove old item and add two new ones
+    removeTrackItem(itemToSplit.id)
+    addTrackItem(leftItem)
+    addTrackItem(rightItem)
+    
+    console.log('[Timeline] Split clip:', {
+      original: itemToSplit.id,
+      left: leftItem.id,
+      right: rightItem.id,
+      splitAt: splitPointInClip,
+    })
+  }
+
   return (
     <section className="flex-1 flex flex-col border-r border-gray-700 bg-gray-900">
       <div className="p-4 border-b border-gray-700 bg-gray-800">
@@ -638,6 +742,13 @@ export function Timeline() {
               }`}
             >
               {isPlaying ? '⏸ Pause' : '▶ Play'}
+            </button>
+            <button
+              onClick={handleSplit}
+              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded font-medium"
+              title="Split clip at playhead position"
+            >
+              ✂ Split
             </button>
             <div className="text-sm text-gray-400">
               {(() => { const ph = Math.floor(useStore.getState().ui.playheadSec || 0); return `Playhead: ${ph}s | Items: ${visibleItems.length}/${sortedItems.length}` })()}
