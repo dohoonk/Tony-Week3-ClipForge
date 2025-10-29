@@ -50,23 +50,23 @@
 - [x] Ensure all serialization includes trackId
 
 ### PR 22: track-interactions
-- [ ] Enable drag-drop across tracks
-- [ ] Implement track-specific drag zones
-- [ ] Add track height management
-- [ ] Create track labels and controls
-- [ ] Handle track visibility toggles
-- [ ] Render only visible track items
-- [ ] Optimize scroll/zoom performance
+- [x] Enable drag-drop across tracks
+- [x] Implement track-specific drag zones
+- [x] Add track height management
+- [x] Create track labels and controls
+- [x] Handle track visibility toggles
+- [x] Render only visible track items
+- [x] Optimize scroll/zoom performance
 - [ ] **Stretch:** Add throttled scroll sync between tracks/ruler (30fps) to prevent jitter
 - [ ] **Stretch:** Implement timeline virtualization (react-window)
 
 ### PR 23: timeline-sequence-playback
-- [ ] Implement continuous timeline playback
-- [ ] Add sequence logic to detect next clip
-- [ ] Handle automatic playhead advancement
-- [ ] Support multi-track playback priority
-- [ ] Add timeline play/pause controls
-- [ ] Handle gaps and overlaps between clips
+- [x] Implement continuous timeline playback
+- [x] Add sequence logic to detect next clip
+- [x] Handle automatic playhead advancement
+- [x] Support multi-track playback priority
+- [x] Add timeline play/pause controls
+- [x] Handle gaps and overlaps between clips
 
 ### PR 24: trim-controls-ui
 - [ ] Add trim handles to timeline clips
