@@ -93,12 +93,12 @@
 - [x] Format metadata values (e.g., "1920x1080", "125.5 MB")
 
 ### PR 23.3: drag-drop-video-import
-- [ ] Accept MP4 files via drag-drop
-- [ ] Accept MOV files via drag-drop
-- [ ] Accept WebM files via drag-drop
-- [ ] Handle file drop on media library area
-- [ ] Validate file types before import
-- [ ] Show import progress/feedback
+- [x] Accept MP4 files via drag-drop
+- [x] Accept MOV files via drag-drop
+- [x] Accept WebM files via drag-drop
+- [x] Handle file drop on media library area
+- [x] Validate file types before import
+- [x] Show import progress/feedback
 
 ### PR 23.4: clip-split-at-playhead
 - [ ] Add "Split" button to timeline controls

@@ -6,6 +6,7 @@ interface Window {
     openFiles: () => Promise<string[]>
     probe: (path: string) => Promise<{ duration: number; width: number; height: number; fileSize?: number }>
     generateThumbnail: (path: string, timeOffset?: number) => Promise<string>
+    saveDroppedFile: (fileData: Uint8Array, fileName: string) => Promise<string>
     
     // Project operations
     saveProject: (project: Project, path?: string) => Promise<string>

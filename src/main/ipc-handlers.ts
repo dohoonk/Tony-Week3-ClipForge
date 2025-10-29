@@ -311,6 +311,38 @@ export function setupIpcHandlers() {
     }
   })
 
+  // saveDroppedFile - Save a dropped file from drag-and-drop
+  ipcMain.handle('saveDroppedFile', async (_event, fileData: Uint8Array, fileName: string) => {
+    console.log(`[IPC] saveDroppedFile called for: ${fileName} (${fileData.length} bytes)`)
+    
+    try {
+      if (!fileData || !ArrayBuffer.isView(fileData)) {
+        throw new Error('Invalid file data: must be a Uint8Array')
+      }
+
+      if (!fileName || typeof fileName !== 'string') {
+        throw new Error('Invalid file name: must be a non-empty string')
+      }
+
+      // Validate file extension
+      const ext = fileName.split('.').pop()?.toLowerCase()
+      if (!ext || !['mp4', 'mov', 'webm'].includes(ext)) {
+        throw new Error(`Invalid file type: ${ext}. Only MP4, MOV, and WebM are supported.`)
+      }
+
+      // Convert Uint8Array to Buffer
+      const buffer = Buffer.from(fileData)
+      
+      // Ingest file using file ingest service
+      const savedPath = fileIngestService.ingestFileData(buffer, fileName)
+      console.log(`[IPC] Dropped file saved: ${savedPath}`)
+      return savedPath
+    } catch (error: any) {
+      console.error('[IPC] Save dropped file failed:', error)
+      throw error
+    }
+  })
+
   console.log('[IPC] All handlers registered successfully')
 }
 

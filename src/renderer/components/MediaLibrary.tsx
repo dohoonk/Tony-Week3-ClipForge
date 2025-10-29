@@ -5,64 +5,9 @@ import { Clip } from '@shared/types'
 export function MediaLibrary() {
   const { clips, addClip, removeClip, trackItems } = useStore()
   const [isImporting, setIsImporting] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const { setSelectedId, selectedId } = useStore()
 
-  const handleImportFiles = async () => {
-    try {
-      setIsImporting(true)
-      
-      // Open file dialog
-      const filePaths = await window.clipforge.openFiles()
-      if (filePaths.length === 0) return
-
-      console.log('[MediaLibrary] Importing files:', filePaths)
-
-      // Process each file
-      for (const filePath of filePaths) {
-        try {
-          // Get video metadata
-          const metadata = await window.clipforge.probe(filePath)
-          
-          // Extract filename
-          const fileName = filePath.split('/').pop() || 'Unknown'
-          const fileExt = fileName.split('.').pop() || ''
-          
-          // Generate thumbnail (don't block on errors)
-          let thumbnailPath: string | undefined = undefined
-          try {
-            thumbnailPath = await window.clipforge.generateThumbnail(filePath)
-            console.log('[MediaLibrary] Generated thumbnail:', thumbnailPath)
-          } catch (thumbError) {
-            console.warn('[MediaLibrary] Failed to generate thumbnail:', thumbError)
-            // Continue without thumbnail
-          }
-          
-          // Create clip object
-          const clip: Clip = {
-            id: `clip-${Date.now()}-${Math.random()}`,
-            name: fileName,
-            path: filePath,
-            duration: metadata.duration,
-            width: metadata.width,
-            height: metadata.height,
-            fileSize: metadata.fileSize,
-            thumbnailPath,
-          }
-          
-          // Add to store
-          addClip(clip)
-          
-          console.log('[MediaLibrary] Added clip:', clip)
-        } catch (error) {
-          console.error('[MediaLibrary] Failed to process file:', filePath, error)
-        }
-      }
-    } catch (error) {
-      console.error('[MediaLibrary] Import failed:', error)
-    } finally {
-      setIsImporting(false)
-    }
-  }
 
   const handleDeleteClip = async (clipId: string) => {
     // Check if clip is used in any trackItems
@@ -103,10 +48,160 @@ export function MediaLibrary() {
     return `${width}×${height}`
   }
 
+  // Validate file type
+  const isValidVideoFile = (fileName: string): boolean => {
+    const ext = fileName.split('.').pop()?.toLowerCase()
+    return ext === 'mp4' || ext === 'mov' || ext === 'webm'
+  }
+
+  // Process files (shared logic for both import button and drag-drop)
+  const processFiles = async (filePaths: string[]) => {
+    try {
+      setIsImporting(true)
+      console.log('[MediaLibrary] Processing files:', filePaths)
+
+      // Filter to only valid video files
+      const validFiles = filePaths.filter(filePath => {
+        const fileName = filePath.split('/').pop() || ''
+        if (!isValidVideoFile(fileName)) {
+          console.warn('[MediaLibrary] Skipping invalid file:', fileName)
+          return false
+        }
+        return true
+      })
+
+      if (validFiles.length === 0) {
+        console.warn('[MediaLibrary] No valid video files to import')
+        return
+      }
+
+      // Process each file
+      for (const filePath of validFiles) {
+        try {
+          // Get video metadata
+          const metadata = await window.clipforge.probe(filePath)
+          
+          // Extract filename
+          const fileName = filePath.split('/').pop() || 'Unknown'
+          
+          // Generate thumbnail (don't block on errors)
+          let thumbnailPath: string | undefined = undefined
+          try {
+            thumbnailPath = await window.clipforge.generateThumbnail(filePath)
+            console.log('[MediaLibrary] Generated thumbnail:', thumbnailPath)
+          } catch (thumbError) {
+            console.warn('[MediaLibrary] Failed to generate thumbnail:', thumbError)
+            // Continue without thumbnail
+          }
+          
+          // Create clip object
+          const clip: Clip = {
+            id: `clip-${Date.now()}-${Math.random()}`,
+            name: fileName,
+            path: filePath,
+            duration: metadata.duration,
+            width: metadata.width,
+            height: metadata.height,
+            fileSize: metadata.fileSize,
+            thumbnailPath,
+          }
+          
+          // Add to store
+          addClip(clip)
+          
+          console.log('[MediaLibrary] Added clip:', clip)
+        } catch (error) {
+          console.error('[MediaLibrary] Failed to process file:', filePath, error)
+        }
+      }
+    } catch (error) {
+      console.error('[MediaLibrary] Import failed:', error)
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    // Get dropped files
+    const files = Array.from(e.dataTransfer.files)
+    
+    if (files.length === 0) {
+      console.warn('[MediaLibrary] No files found in drop event')
+      return
+    }
+
+    // Process files: read as ArrayBuffer, send via IPC, then process
+    const filePaths: string[] = []
+    
+    for (const file of files) {
+      // Validate file type first
+      if (!isValidVideoFile(file.name)) {
+        console.warn('[MediaLibrary] Skipping invalid file type:', file.name)
+        continue
+      }
+
+      try {
+        // Read file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        
+        // Send to main process to save
+        const savedPath = await window.clipforge.saveDroppedFile(uint8Array, file.name)
+        filePaths.push(savedPath)
+        console.log('[MediaLibrary] Saved dropped file:', savedPath)
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to save dropped file:', file.name, error)
+      }
+    }
+
+    if (filePaths.length > 0) {
+      await processFiles(filePaths)
+    } else {
+      console.warn('[MediaLibrary] No valid files processed from drop')
+    }
+  }
+
+  // Update handleImportFiles to use shared processFiles function
+  const handleImportFiles = async () => {
+    try {
+      // Open file dialog
+      const filePaths = await window.clipforge.openFiles()
+      if (filePaths.length === 0) return
+      
+      await processFiles(filePaths)
+    } catch (error) {
+      console.error('[MediaLibrary] Import failed:', error)
+    }
+  }
+
   const clipList = Object.values(clips)
 
   return (
-    <aside className="w-64 h-full border-r border-gray-700 bg-gray-900 flex flex-col">
+    <aside 
+      className={`w-64 h-full border-r border-gray-700 bg-gray-900 flex flex-col transition-colors ${
+        isDragOver ? 'bg-blue-900/20 border-blue-500' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Header */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center justify-between mb-4">
@@ -121,12 +216,27 @@ export function MediaLibrary() {
         </div>
       </div>
 
+      {/* Import Progress Indicator */}
+      {isImporting && (
+        <div className="px-4 py-2 bg-blue-900/50 border-b border-blue-700 text-sm text-blue-200">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+            <span>Importing video files...</span>
+          </div>
+        </div>
+      )}
+
       {/* Clips List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {clipList.length === 0 ? (
-          <div className="p-4 bg-gray-800 rounded border border-gray-700 text-center">
+          <div className={`p-4 bg-gray-800 rounded border-2 border-dashed text-center transition-colors ${
+            isDragOver ? 'border-blue-500 bg-blue-900/20' : 'border-gray-700'
+          }`}>
             <div className="aspect-video bg-gray-700 rounded mb-2"></div>
-            <p className="text-sm text-gray-400">Click "Import" to add video clips</p>
+            <p className="text-sm text-gray-400">
+              {isDragOver ? 'Drop video files here' : 'Drag & drop or click "Import" to add video clips'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Supports MP4, MOV, WebM</p>
           </div>
         ) : (
           clipList.map((clip) => (
@@ -134,7 +244,12 @@ export function MediaLibrary() {
               key={clip.id}
               className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors group cursor-move relative"
               draggable
-              onDragStart={(e) => handleDragStart(e, clip.id)}
+              onDragStart={(e) => {
+                handleDragStart(e, clip.id)
+                e.stopPropagation() // Prevent triggering media library drop
+              }}
+              onDragOver={(e) => e.stopPropagation()} // Prevent triggering media library drop
+              onDrop={(e) => e.stopPropagation()} // Prevent triggering media library drop
               title={`${clip.name}\nDuration: ${formatDuration(clip.duration)}\nResolution: ${formatResolution(clip.width, clip.height)}\n${clip.fileSize ? `Size: ${formatFileSize(clip.fileSize)}` : 'Size: Unknown'}\nPath: ${clip.path}`}
             >
               {/* Thumbnail */}

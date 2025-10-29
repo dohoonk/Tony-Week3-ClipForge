@@ -49,6 +49,31 @@ export class FileIngestService {
   }
 
   /**
+   * Save file data (from drag-drop) to clips directory
+   * @param fileData File data as Buffer
+   * @param originalFileName Original filename with extension
+   * @returns New file path in clips directory
+   */
+  ingestFileData(fileData: Buffer, originalFileName: string): string {
+    // Get original extension
+    const extension = extname(originalFileName)
+    
+    // Generate UUID filename
+    const uuid = randomUUID()
+    const newFilename = `${uuid}${extension}`
+    const targetPath = join(this.CLIPS_DIR, newFilename)
+
+    // Write file to clips directory
+    const { writeFileSync } = require('fs')
+    writeFileSync(targetPath, fileData)
+    
+    console.log(`[FileIngest] Saved ${originalFileName} → ${newFilename}`)
+    console.log(`[FileIngest] Target: ${targetPath}`)
+
+    return targetPath
+  }
+
+  /**
    * Get the clips directory path
    */
   getClipsDir(): string {
