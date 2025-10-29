@@ -424,7 +424,13 @@ export function Timeline() {
   }
 
   const handlePlayPause = () => {
-    setIsPlaying(!isPlaying)
+    if (!isPlaying) {
+      // Starting playback - just set isPlaying to true
+      setIsPlaying(true)
+    } else {
+      // Pausing - just toggle the state
+      setIsPlaying(false)
+    }
   }
 
   const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {

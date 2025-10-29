@@ -14,6 +14,7 @@ export function Player() {
   const handledInfinitySrcRef = useRef<string | undefined>(undefined)
   const advanceLockUntilRef = useRef<number>(0)
   const activeClipRef = useRef<{ clipId: string; itemId: string } | null>(null)
+  const loadingVideoRef = useRef(false) // Prevent playhead advancement during video loading
   const EPS = 0.005 // 5ms boundary fudge to avoid end/start ambiguity
   const store = useStore()
   const clips = store.clips
@@ -181,51 +182,11 @@ export function Player() {
     }
   }
 
-  // Handle video time updates to check if we should advance to next clip
+  // Handle video time updates - DISABLED during timeline playback
+  // Timeline clock drives everything, not video.currentTime
   const handleTimeUpdate = () => {
-    if (!isPlaying || !videoRef.current) return
-    
-    const currentClip = getClipAtPlayheadPosition()
-    if (!currentClip) return
-    
-    const currentTime = playheadSec || 0
-    const videoTime = videoRef.current.currentTime
-    
-    // Find the track item for the current clip
-    const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
-    let currentTrackItem = null
-    
-    for (const track of sortedTracks) {
-      if (!track.visible) continue
-      
-      const trackItems = Object.values(store.trackItems).filter(item => item.trackId === track.id)
-      
-      for (const item of trackItems) {
-        const clip = store.clips[item.clipId]
-        if (clip && clip.id === currentClip.id) {
-          currentTrackItem = item
-          break
-        }
-      }
-      if (currentTrackItem) break
-    }
-    
-    if (currentTrackItem) {
-      const clip = store.clips[currentTrackItem.clipId]
-      const clipDuration = Math.max(0, Number(clip?.duration) || 0)
-      const requestedDuration = Math.max(0, Number(currentTrackItem.outSec) - Number(currentTrackItem.inSec))
-      const effectiveDuration = Math.min(requestedDuration || 0, clipDuration || 0)
-
-      // Compute end using the video's own timebase to avoid race with playhead updates
-      const inSec = Number(currentTrackItem.inSec) || 0
-      const videoEnd = inSec + (isFinite(effectiveDuration) ? effectiveDuration : 0)
-
-      // Check if we've reached the end of this clip's segment based on the video clock
-      if (videoTime >= videoEnd - 0.01) {
-        console.log('[Player] Reached end of segment (video time), advancing to next clip')
-        handleVideoEnded()
-      }
-    }
+    // Disabled - timeline clock is the source of truth
+    return
   }
 
   // Calculate total timeline duration (clamped to actual clip durations)
@@ -262,16 +223,30 @@ export function Player() {
   const lockActive = nowMs < advanceLockUntilRef.current
   const videoSrc = (lockActive && lockedSrc) ? lockedSrc : (currentVideoPath ? `file://${currentVideoPath}` : undefined)
 
+  // Track previous isPlaying state to detect transitions
+  const prevIsPlayingRef = useRef(isPlaying)
+  
+  // Auto-call handlePlay when isPlaying changes from false to true
   useEffect(() => {
-    if (!isPlaying) {
-      advanceLockUntilRef.current = 0
+    if (isPlaying && !prevIsPlayingRef.current) {
+      console.log('[Player] isPlaying changed from false to true, calling handlePlay')
+      handlePlay()
     }
+    prevIsPlayingRef.current = isPlaying
   }, [isPlaying])
 
   // Update video source and seek when playhead changes
   useEffect(() => {
+    console.log('[Player] Video source useEffect triggered, playheadSec:', playheadSec)
     const video = videoRef.current
     if (!video) return
+    
+    // Skip this effect if we're currently loading a video
+    if (loadingVideoRef.current) {
+      console.log('[Player] Skipping video source update - already loading')
+      return
+    }
+    
     const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
     const t = playheadSec || 0
 
@@ -297,10 +272,13 @@ export function Player() {
 
     if (!chosen) {
       // No clip to play at this playhead. Stay paused; RAF will advance timeline.
-      activeClipRef.current = null
-      lastSrcRef.current = undefined
-      handledInfinitySrcRef.current = undefined
-      video.pause()
+      // Only clear activeClipRef if we're not currently playing through a gap
+      if (!isPlaying || !activeClipRef.current) {
+        activeClipRef.current = null
+        lastSrcRef.current = undefined
+        handledInfinitySrcRef.current = undefined
+        video.pause()
+      }
       return
     }
 
@@ -310,14 +288,33 @@ export function Player() {
 
     // Only set src when it actually changes to avoid repeated metadata events
     if (neededSrc && lastSrcRef.current !== neededSrc) {
+      console.log('[Player] Setting loading flag, loading video:', neededSrc, 'seekTime:', seekTime)
+      loadingVideoRef.current = true // Prevent playhead advancement during loading
       lastSrcRef.current = neededSrc
       if (video.src !== neededSrc) {
         video.src = neededSrc
       }
       video.load()
-      if (isFinite(seekTime)) {
-        try { video.currentTime = seekTime } catch {}
+      
+      // Wait for metadata to load before seeking
+      const handleLoadedMetadata = () => {
+        console.log('[Player] Metadata loaded, seeking to:', seekTime)
+        if (isFinite(seekTime)) {
+          try { 
+            video.currentTime = seekTime
+            console.log('[Player] Seeked to:', video.currentTime)
+          } catch (e) {
+            console.log('[Player] Seek failed:', e)
+          }
+        }
+        // Clear loading flag after seek is complete (longer delay to ensure seek finishes)
+        setTimeout(() => {
+          console.log('[Player] Clearing loading flag after video load and seek')
+          loadingVideoRef.current = false
+        }, 300)
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata)
       }
+      video.addEventListener('loadedmetadata', handleLoadedMetadata)
     } else if (!isPlaying) {
       // Only seek during paused state to avoid jitter during playback
       if (isFinite(seekTime)) {
@@ -325,77 +322,46 @@ export function Player() {
       }
     }
 
+    // Set activeClipRef when we have a clip to play
+    if (chosen) {
+      activeClipRef.current = { clipId: chosen.clip.id, itemId: chosen.item.id }
+    }
+
     if (isPlaying && activeClipRef.current && video.paused) {
       video.play().catch(() => {})
     } else if (!activeClipRef.current) {
       video.pause()
-    }
-
-    if (!isPlaying) {
-      activeClipRef.current = { clipId: chosen.clip.id, itemId: chosen.item.id }
     }
   }, [videoSrc, isPlaying, playheadSec])
 
   // Smooth playhead sync using requestVideoFrameCallback when available
   // (falls back to requestAnimationFrame). Commits to store at ~10Hz to avoid churn.
   useEffect(() => {
+    console.log('[Player] Playhead update useEffect triggered, isPlaying:', isPlaying)
     const video = videoRef.current
     if (!video) return
     let rafId: number | null = null
-    let lastMs = 0
+    let lastMs = performance.now() // Initialize to current time
     const frameInterval = 33 // ~30fps sampling
     let lastCommitMs = 0
     const commitInterval = 100 // commit to store at 10Hz
 
     const step = (now: number) => {
-      if (!isPlaying) { return }
+      if (!isPlaying) { 
+        console.log('[Player] Step function: not playing, stopping')
+        return 
+      }
       if (now - lastMs >= frameInterval) {
         const dtSec = (now - lastMs) / 1000
         const active = activeClipRef.current
-        if (active) {
-          const item = store.trackItems[active.itemId]
-          const clip = store.clips[active.clipId]
-          if (item && clip) {
-            const inSec = Number(item.inSec) || 0
-            const start = Number(item.trackPosition) || 0
-            const rel = Math.max(0, video.currentTime - inSec)
-            const mapped = start + rel
-            const nowMsPerf = performance.now()
-            const current = useStore.getState().ui.playheadSec
-            if ((nowMsPerf - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
-              useStore.getState().setPlayheadSec(mapped)
-              lastCommitMs = nowMsPerf
-            }
-          }
-        } else {
-          const hitClip = getClipAtPlayheadPosition()
-          if (hitClip) {
-            const sortedTracks = Object.values(store.tracks).sort((a, b) => a.order - b.order)
-            outer: for (const track of sortedTracks) {
-              if (!track.visible) continue
-              const items = Object.values(store.trackItems).filter(it => it.trackId === track.id)
-              for (const item of items) {
-                const clip = store.clips[item.clipId]
-                if (!clip || clip.id !== hitClip.id) continue
-                const inSec = Number(item.inSec) || 0
-                const start = Number(item.trackPosition) || 0
-                const rel = Math.max(0, video.currentTime - inSec)
-                const mapped = start + rel
-                const nowMsPerf = performance.now()
-                const current = useStore.getState().ui.playheadSec
-                if ((nowMsPerf - lastCommitMs) >= commitInterval || Math.abs((current || 0) - mapped) > 0.2) {
-                  useStore.getState().setPlayheadSec(mapped)
-                  lastCommitMs = nowMsPerf
-                }
-                break outer
-            }
-            }
-          } else {
-            // Gap: advance timeline clock continuously
-            const current = useStore.getState().ui.playheadSec || 0
-            useStore.getState().setPlayheadSec(current + dtSec)
-          }
-        }
+        console.log('[Player] Step function: activeClipRef =', active, 'dtSec =', dtSec, 'loadingVideoRef:', loadingVideoRef.current)
+        
+        // During playback, ALWAYS advance the timeline clock
+        // Never sync from video.currentTime during playback - it causes jumps
+        const current = useStore.getState().ui.playheadSec || 0
+        const newTime = current + dtSec
+        console.log('[Player] Advancing timeline:', current, '->', newTime)
+        useStore.getState().setPlayheadSec(newTime)
         lastMs = now
       }
       rafId = requestAnimationFrame(step)
@@ -403,22 +369,29 @@ export function Player() {
 
     // Prefer requestVideoFrameCallback for decoder-synced updates
     let cancelVideoCallback: (() => void) | null = null
-    const hasRVFC = typeof (video as any).requestVideoFrameCallback === 'function'
+    const hasRVFC = false // Force use requestAnimationFrame for debugging
 
     if (isPlaying) {
+      console.log('[Player] Starting playhead update loop, hasRVFC:', hasRVFC)
       if (hasRVFC) {
         let handle: number | null = null
         const loop = (_now: number, _meta: any) => {
+          console.log('[Player] requestVideoFrameCallback loop called')
           step(performance.now())
           handle = (video as any).requestVideoFrameCallback(loop)
         }
         handle = (video as any).requestVideoFrameCallback(loop)
+        console.log('[Player] requestVideoFrameCallback handle:', handle)
         cancelVideoCallback = () => {
           try { if (handle != null) (video as any).cancelVideoFrameCallback(handle) } catch {}
         }
       } else {
+        console.log('[Player] Using requestAnimationFrame fallback')
         rafId = requestAnimationFrame(step)
+        console.log('[Player] requestAnimationFrame ID:', rafId)
       }
+    } else {
+      console.log('[Player] Not playing, not starting playhead update loop')
     }
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
@@ -613,6 +586,7 @@ export function Player() {
   }, [])
 
   const handlePlay = () => {
+    console.log('[Player] handlePlay called, current playhead:', playheadSec)
     // Only auto-switch out of preview when in webcam-only mode
     if (recordingType === 'webcam' && webcamStream && !isRecording && countdown === null) {
       stopWebcamPreview()
@@ -642,6 +616,7 @@ export function Player() {
     }
     if (!chosen) {
       // Timeline-first behavior: if starting in a gap, just play the gap (black)
+      console.log('[Player] Starting playback in gap at', t, 'seconds')
       activeClipRef.current = null
       store.setIsPlaying(true)
       return
