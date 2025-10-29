@@ -270,10 +270,14 @@ export function MediaLibrary() {
                     Loading...
                   </div>
                 )}
-                {/* Delete button */}
+                {/* Delete button on thumbnail */}
                 <button
-                  onClick={() => handleDeleteClip(clip.id)}
-                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs z-10"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDeleteClip(clip.id)
+                  }}
+                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-7 h-7 flex items-center justify-center transition-opacity text-sm z-10 shadow-lg"
+                  title="Delete clip"
                 >
                   ×
                 </button>
@@ -281,9 +285,21 @@ export function MediaLibrary() {
               
               {/* Clip info */}
               <div className="space-y-1">
-                <p className="text-sm text-white font-medium truncate" title={clip.name}>
-                  {clip.name}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-white font-medium truncate flex-1" title={clip.name}>
+                    {clip.name}
+                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteClip(clip.id)
+                    }}
+                    className="px-2 py-0.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                    title="Delete clip from library"
+                  >
+                    ✕
+                  </button>
+                </div>
                 <div className="text-xs text-gray-400 space-y-0.5">
                   <div className="flex justify-between">
                     <span>Duration:</span>
