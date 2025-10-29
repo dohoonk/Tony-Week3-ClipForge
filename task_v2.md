@@ -34,8 +34,8 @@
 - [x] Implement simultaneous screen + webcam capture
 - [x] Add FFmpeg overlay filter for PiP
 - [x] Create live PiP preview (pre-record)
-- [ ] Handle stream synchronization
-- [ ] Optimize CPU usage for dual capture
+- [ ] **Stretch:** Handle stream synchronization
+- [ ] **Stretch:** Optimize CPU usage for dual capture
 
 ---
 

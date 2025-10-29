@@ -6,10 +6,12 @@ const TRACK_HEIGHT = 80
 const PLAYHEAD_HEIGHT = TRACK_HEIGHT
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 10
+const MIN_TRACK_HEIGHT = 60
+const MAX_TRACK_HEIGHT = 120
 
 export function Timeline() {
   const store = useStore()
-  const { trackItems, tracks, addTrackItem, addTrack, removeTrack, setPlayheadSec, setIsPlaying } = store
+  const { trackItems, tracks, addTrackItem, addTrack, removeTrack, setPlayheadSec, setIsPlaying, setTrackHeight, toggleTrackVisibility } = store
   const playheadSec = store.ui.playheadSec
   const isPlaying = store.ui.isPlaying
   const zoom = store.ui.zoom
@@ -30,22 +32,41 @@ export function Timeline() {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  const handleTrackItemDragStart = (e: React.DragEvent, trackItemId: string) => {
+    e.dataTransfer.setData('trackItemId', trackItemId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(true)
     
-    // Calculate which track is being hovered
-    const rect = timelineRef.current?.getBoundingClientRect()
-    if (rect) {
-      const mouseY = e.clientY - rect.top
-      const scrollTop = scrollContainerRef.current?.scrollTop || 0
-      const totalY = mouseY + scrollTop
-      const trackIndex = Math.floor(totalY / TRACK_HEIGHT)
-      const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
-      const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
-      setHoveredTrackIndex(clampedIndex)
-    }
+        // Calculate which track is being hovered
+        const rect = timelineRef.current?.getBoundingClientRect()
+        if (rect) {
+          const mouseY = e.clientY - rect.top
+          const scrollTop = scrollContainerRef.current?.scrollTop || 0
+          const totalY = mouseY + scrollTop
+          
+          // Calculate track index based on cumulative track heights
+          const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+          let cumulativeHeight = 0
+          let trackIndex = 0
+          
+          for (let i = 0; i < sortedTracks.length; i++) {
+            const trackHeight = sortedTracks[i].height || 80
+            if (totalY >= cumulativeHeight && totalY < cumulativeHeight + trackHeight) {
+              trackIndex = i
+              break
+            }
+            cumulativeHeight += trackHeight
+            trackIndex = i + 1
+          }
+          
+          const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
+          setHoveredTrackIndex(clampedIndex)
+        }
   }
 
   const handleDragLeave = () => {
@@ -61,6 +82,14 @@ export function Timeline() {
 
     console.log('[Timeline] Drop event triggered')
 
+    // Check if this is a track item being moved
+    const trackItemId = e.dataTransfer.getData('trackItemId')
+    if (trackItemId) {
+      handleTrackItemMove(e, trackItemId)
+      return
+    }
+
+    // Otherwise, handle clip drop from media library
     const clipId = e.dataTransfer.getData('clipId')
     console.log('[Timeline] ClipId from drop:', clipId)
     
@@ -83,19 +112,30 @@ export function Timeline() {
     console.log('[Timeline] Drop at:', dropTime, 'seconds, y:', mouseY)
     console.log('[Timeline] Scroll top:', scrollContainerRef.current?.scrollTop)
 
-    // Calculate which track based on Y position
-    // The Y position is relative to the timeline container
-    const scrollTop = scrollContainerRef.current?.scrollTop || 0
-    const totalY = mouseY + scrollTop
-    
-    console.log('[Timeline] Total Y (mouseY + scrollTop):', totalY)
-    
-    // Calculate track index - each track is TRACK_HEIGHT pixels
-    const trackIndex = Math.floor(totalY / TRACK_HEIGHT)
-    const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
-    
-    // Clamp track index to valid range
-    const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
+        // Calculate which track based on Y position
+        // The Y position is relative to the timeline container
+        const scrollTop = scrollContainerRef.current?.scrollTop || 0
+        const totalY = mouseY + scrollTop
+        
+        console.log('[Timeline] Total Y (mouseY + scrollTop):', totalY)
+        
+        // Calculate track index based on cumulative track heights
+        const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+        let cumulativeHeight = 0
+        let trackIndex = 0
+        
+        for (let i = 0; i < sortedTracks.length; i++) {
+          const trackHeight = sortedTracks[i].height || 80
+          if (totalY >= cumulativeHeight && totalY < cumulativeHeight + trackHeight) {
+            trackIndex = i
+            break
+          }
+          cumulativeHeight += trackHeight
+          trackIndex = i + 1
+        }
+        
+        // Clamp track index to valid range
+        const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
     
     console.log('[Timeline] Calculated track index:', trackIndex, '→ clamped:', clampedIndex)
     console.log('[Timeline] Available tracks:', sortedTracks.length, sortedTracks.map(t => t.name))
@@ -122,6 +162,61 @@ export function Timeline() {
     addTrackItem(trackItem)
   }
 
+  const handleTrackItemMove = (e: React.DragEvent, trackItemId: string) => {
+    console.log('[Timeline] Moving track item:', trackItemId)
+    
+    // Get mouse position relative to timeline
+    const rect = timelineRef.current?.getBoundingClientRect()
+    if (!rect) {
+      console.warn('[Timeline] No timeline ref')
+      return
+    }
+
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+    const dropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+
+    // Calculate which track based on Y position
+    const scrollTop = scrollContainerRef.current?.scrollTop || 0
+    const totalY = mouseY + scrollTop
+    
+    // Calculate track index based on cumulative track heights
+    const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
+    let cumulativeHeight = 0
+    let trackIndex = 0
+    
+    for (let i = 0; i < sortedTracks.length; i++) {
+      const trackHeight = sortedTracks[i].height || 80
+      if (totalY >= cumulativeHeight && totalY < cumulativeHeight + trackHeight) {
+        trackIndex = i
+        break
+      }
+      cumulativeHeight += trackHeight
+      trackIndex = i + 1
+    }
+    
+    const clampedIndex = Math.max(0, Math.min(trackIndex, sortedTracks.length - 1))
+    const targetTrack = sortedTracks[clampedIndex]
+    
+    console.log('[Timeline] Moving to track:', targetTrack.name, 'at time:', dropTime)
+    
+    // Update the track item
+    const existingItem = store.trackItems[trackItemId]
+    if (existingItem) {
+      const updatedItem = {
+        ...existingItem,
+        trackId: targetTrack.id,
+        trackPosition: dropTime
+      }
+      
+      // Remove old item and add updated one
+      store.removeTrackItem(trackItemId)
+      store.addTrackItem(updatedItem)
+      
+      console.log('[Timeline] Track item moved successfully')
+    }
+  }
+
   const handleClick = (trackItemId: string) => {
     console.log('[Timeline] Clicked track item:', trackItemId)
     // TODO: Implement selection
@@ -136,13 +231,14 @@ export function Timeline() {
   const handleAddTrack = () => {
     const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
     const nextOrder = sortedTracks.length > 0 ? Math.max(...sortedTracks.map(t => t.order)) + 1 : 0
-    const newTrack = {
-      id: `track-${Date.now()}`,
-      kind: 'video' as const,
-      order: nextOrder,
-      visible: true,
-      name: `Video Track ${nextOrder + 1}`
-    }
+        const newTrack = {
+          id: `track-${Date.now()}`,
+          kind: 'video' as const,
+          order: nextOrder,
+          visible: true,
+          name: `Video Track ${nextOrder + 1}`,
+          height: 80 // Default height
+        }
     addTrack(newTrack)
     console.log('[Timeline] Added new track:', newTrack)
   }
@@ -425,13 +521,13 @@ export function Timeline() {
           }, 16) // ~60fps update rate
         }}
       >
-        <div 
-          ref={timelineRef}
-          className="relative bg-gray-900"
-          style={{ 
-            width: `${timelineWidth}px`, 
-            minHeight: `${Math.max(Object.values(tracks).length * TRACK_HEIGHT, 400)}px`
-          }}
+            <div 
+              ref={timelineRef}
+              className="relative bg-gray-900"
+              style={{ 
+                width: `${timelineWidth}px`, 
+                minHeight: `${Math.max(Object.values(tracks).reduce((total, track) => total + (track.height || 80), 0), 400)}px`
+              }}
           onDragOver={handleDragOver}
           onDragEnter={(e) => {
             e.preventDefault()
@@ -457,24 +553,41 @@ export function Timeline() {
             .map((track, index) => {
               // Get track items for this specific track
               const itemsForThisTrack = Object.values(trackItems).filter(item => item.trackId === track.id)
-              const trackTop = track.order * TRACK_HEIGHT
+              
+              // Calculate track position based on previous track heights
+              let trackTop = 0
+              for (let i = 0; i < index; i++) {
+                const prevTrack = Object.values(tracks).sort((a, b) => a.order - b.order)[i]
+                trackTop += prevTrack.height || 80
+              }
+              
               const isHovered = hoveredTrackIndex === index
+              const trackHeight = track.height || 80
               
               return (
                 <div
                   key={track.id}
-                  className={`relative border-b border-gray-700 ${isHovered ? 'bg-blue-900 bg-opacity-20' : ''}`}
+                  className={`relative border-b border-gray-700 ${isHovered ? 'bg-blue-900 bg-opacity-20' : ''} ${!track.visible ? 'opacity-50' : ''}`}
                   style={{
                     top: `${trackTop}px`,
                     width: `${timelineWidth}px`,
-                    height: `${TRACK_HEIGHT}px`
+                    height: `${trackHeight}px`
                   }}
                 >
                   {/* Track label */}
                   <div className={`absolute left-0 top-0 w-32 h-full border-r border-gray-700 flex items-center px-2 z-10 ${isHovered ? 'bg-blue-800' : 'bg-gray-800'}`}>
-                    <span className={`text-xs truncate ${isHovered ? 'text-blue-200' : 'text-gray-300'}`}>
-                      {isHovered ? `Drop on ${track.name}` : track.name}
-                    </span>
+                    <div className="flex items-center gap-1 w-full">
+                      <button
+                        onClick={() => toggleTrackVisibility(track.id)}
+                        className={`text-xs ${track.visible ? 'text-green-400' : 'text-gray-500'}`}
+                        title={track.visible ? 'Hide track' : 'Show track'}
+                      >
+                        {track.visible ? '👁' : '👁‍🗨'}
+                      </button>
+                      <span className={`text-xs truncate flex-1 ${isHovered ? 'text-blue-200' : 'text-gray-300'}`}>
+                        {isHovered ? `Drop on ${track.name}` : track.name}
+                      </span>
+                    </div>
                   </div>
                   
                   {/* Playhead indicator for this track */}
@@ -483,7 +596,7 @@ export function Timeline() {
                     style={{ 
                       left: `${((playheadSec || 0) * pixelsPerSecond) - 2}px`,
                       width: '4px',
-                      height: `${TRACK_HEIGHT}px`,
+                      height: `${trackHeight}px`,
                       top: '0px',
                       transition: 'none',
                       boxShadow: '0 0 4px 2px rgba(239, 68, 68, 0.5)',
@@ -514,18 +627,20 @@ export function Timeline() {
                     const itemWidth = itemDuration * pixelsPerSecond
                     
                     return (
-                      <div
-                        key={item.id}
-                        className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
-                        style={{
-                          left: `${item.trackPosition * pixelsPerSecond}px`,
-                          width: `${itemWidth}px`,
-                          height: `${TRACK_HEIGHT - 10}px`,
-                          top: '5px',
-                        }}
-                        onClick={() => handleClick(item.id)}
-                        onDoubleClick={() => handleDoubleClick(item.id)}
-                      >
+                          <div
+                            key={item.id}
+                            className="absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
+                            style={{
+                              left: `${item.trackPosition * pixelsPerSecond}px`,
+                              width: `${itemWidth}px`,
+                              height: `${trackHeight - 10}px`,
+                              top: '5px',
+                            }}
+                            onClick={() => handleClick(item.id)}
+                            draggable
+                            onDragStart={(e) => handleTrackItemDragStart(e, item.id)}
+                            onDoubleClick={() => handleDoubleClick(item.id)}
+                          >
                         <div className="p-2 text-white text-xs truncate">
                           {clip?.name || 'TrackItem'}
                         </div>
