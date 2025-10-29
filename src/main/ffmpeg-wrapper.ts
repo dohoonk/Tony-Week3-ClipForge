@@ -65,7 +65,7 @@ export class FFmpegWrapper extends EventEmitter {
    * @param filePath Path to video file
    * @returns Metadata object with duration, width, height
    */
-  async probe(filePath: string): Promise<{ duration: number; width: number; height: number }> {
+  async probe(filePath: string): Promise<{ duration: number; width: number; height: number; fileSize?: number }> {
     return new Promise((resolve, reject) => {
       // Check if file exists first
       if (!existsSync(filePath)) {
@@ -126,10 +126,13 @@ export class FFmpegWrapper extends EventEmitter {
             console.log(`[FFmpeg] Using fallback duration: ${finalDuration}s`)
           }
 
+          const fileSize = metadata.format.size ? Number(metadata.format.size) : undefined
+          
           resolve({
             duration: finalDuration,
             width: videoStream.width || 0,
             height: videoStream.height || 0,
+            fileSize,
           })
         })
     })

@@ -7,6 +7,7 @@ export type Clip = {
   duration: number // seconds
   width: number
   height: number
+  fileSize?: number // File size in bytes
   thumbnailPath?: string // Path to generated thumbnail image
 }
 

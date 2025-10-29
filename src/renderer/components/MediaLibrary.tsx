@@ -45,6 +45,7 @@ export function MediaLibrary() {
             duration: metadata.duration,
             width: metadata.width,
             height: metadata.height,
+            fileSize: metadata.fileSize,
             thumbnailPath,
           }
           
@@ -90,6 +91,18 @@ export function MediaLibrary() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const formatFileSize = (bytes?: number): string => {
+    if (!bytes) return 'Unknown'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+
+  const formatResolution = (width: number, height: number): string => {
+    return `${width}×${height}`
+  }
+
   const clipList = Object.values(clips)
 
   return (
@@ -119,9 +132,10 @@ export function MediaLibrary() {
           clipList.map((clip) => (
             <div
               key={clip.id}
-              className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors group cursor-move"
+              className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-gray-600 transition-colors group cursor-move relative"
               draggable
               onDragStart={(e) => handleDragStart(e, clip.id)}
+              title={`${clip.name}\nDuration: ${formatDuration(clip.duration)}\nResolution: ${formatResolution(clip.width, clip.height)}\n${clip.fileSize ? `Size: ${formatFileSize(clip.fileSize)}` : 'Size: Unknown'}\nPath: ${clip.path}`}
             >
               {/* Thumbnail */}
               <div className="aspect-video bg-gray-700 rounded mb-2 relative overflow-hidden">
@@ -155,9 +169,21 @@ export function MediaLibrary() {
                 <p className="text-sm text-white font-medium truncate" title={clip.name}>
                   {clip.name}
                 </p>
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>{formatDuration(clip.duration)}</span>
-                  <span>{clip.width}×{clip.height}</span>
+                <div className="text-xs text-gray-400 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Duration:</span>
+                    <span className="font-medium">{formatDuration(clip.duration)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Resolution:</span>
+                    <span className="font-medium">{formatResolution(clip.width, clip.height)}</span>
+                  </div>
+                  {clip.fileSize && (
+                    <div className="flex justify-between">
+                      <span>Size:</span>
+                      <span className="font-medium">{formatFileSize(clip.fileSize)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

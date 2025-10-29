@@ -86,11 +86,11 @@
 - [x] Show thumbnail on hover or in clip card
 
 ### PR 23.2: media-metadata-display
-- [ ] Display clip duration in media library
-- [ ] Show video resolution (width x height)
-- [ ] Display file size (MB/GB)
-- [ ] Add metadata tooltip or info panel
-- [ ] Format metadata values (e.g., "1920x1080", "125.5 MB")
+- [x] Display clip duration in media library
+- [x] Show video resolution (width x height)
+- [x] Display file size (MB/GB)
+- [x] Add metadata tooltip or info panel
+- [x] Format metadata values (e.g., "1920x1080", "125.5 MB")
 
 ### PR 23.3: drag-drop-video-import
 - [ ] Accept MP4 files via drag-drop

@@ -4,7 +4,7 @@ interface Window {
   clipforge: {
     // File operations
     openFiles: () => Promise<string[]>
-    probe: (path: string) => Promise<{ duration: number; width: number; height: number }>
+    probe: (path: string) => Promise<{ duration: number; width: number; height: number; fileSize?: number }>
     generateThumbnail: (path: string, timeOffset?: number) => Promise<string>
     
     // Project operations
