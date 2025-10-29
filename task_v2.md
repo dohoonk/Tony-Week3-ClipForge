@@ -108,11 +108,11 @@
 - [x] Maintain clip references correctly
 
 ### PR 23.5: snap-to-grid-edges
-- [ ] Implement snap-to-grid (e.g., 0.5s intervals)
-- [ ] Implement snap-to-clip edges
-- [ ] Toggle snap on/off in UI
-- [ ] Visual feedback when snapping
-- [ ] Apply snap during drag-drop and trim
+- [x] Implement snap-to-grid (e.g., 0.5s intervals)
+- [x] Implement snap-to-clip edges
+- [x] Toggle snap on/off in UI
+- [x] Visual feedback when snapping
+- [x] Apply snap during drag-drop and trim
 
 ### PR 23.6: export-resolution-options
 - [ ] Add resolution selector to export panel

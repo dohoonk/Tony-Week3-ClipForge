@@ -39,6 +39,9 @@ interface ClipForgeActions {
   setZoom: (zoom: number) => void
   setSelectedId: (id?: string) => void
   setIsPlaying: (isPlaying: boolean) => void
+  setSnapEnabled: (enabled: boolean) => void
+  setSnapInterval: (interval: number) => void
+  setSnapToEdges: (enabled: boolean) => void
 }
 
 type ClipForgeStore = ClipForgeState & ClipForgeActions
@@ -69,6 +72,9 @@ export const useStore = create<ClipForgeStore>((set) => ({
     zoom: 1,
     selectedId: undefined,
     isPlaying: false,
+    snapEnabled: true, // Snap enabled by default
+    snapInterval: 0.5, // 0.5 second intervals
+    snapToEdges: true, // Snap to clip edges enabled by default
   },
   
   // Actions
@@ -187,6 +193,18 @@ export const useStore = create<ClipForgeStore>((set) => ({
   
   setIsPlaying: (isPlaying: boolean) => set((state) => ({
     ui: { ...state.ui, isPlaying }
+  })),
+  
+  setSnapEnabled: (enabled: boolean) => set((state) => ({
+    ui: { ...state.ui, snapEnabled: enabled }
+  })),
+  
+  setSnapInterval: (interval: number) => set((state) => ({
+    ui: { ...state.ui, snapInterval: Math.max(0.1, interval) } // Minimum 0.1s
+  })),
+  
+  setSnapToEdges: (enabled: boolean) => set((state) => ({
+    ui: { ...state.ui, snapToEdges: enabled }
   })),
 }))
 

@@ -54,6 +54,9 @@ export type ClipForgeState = {
     zoom: number // multiplier (0.5x - 10x)
     selectedId?: string // selected trackItem
     isPlaying: boolean
+    snapEnabled: boolean // snap-to-grid enabled
+    snapInterval: number // snap grid interval in seconds (e.g., 0.5)
+    snapToEdges: boolean // snap to clip edges enabled
   }
 }
 

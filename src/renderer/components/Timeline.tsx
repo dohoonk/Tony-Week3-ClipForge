@@ -30,10 +30,15 @@ export function Timeline() {
   const isPlaying = useStore(s => s.ui.isPlaying)
   const zoom = useStore(s => s.ui.zoom)
   const setZoom = useStore(s => s.setZoom)
+  const snapEnabled = useStore(s => s.ui.snapEnabled)
+  const snapInterval = useStore(s => s.ui.snapInterval)
+  const snapToEdges = useStore(s => s.ui.snapToEdges)
+  const setSnapEnabled = useStore(s => s.setSnapEnabled)
   
   const [dragOver, setDragOver] = useState(false)
   const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null)
   const [dropGuideTime, setDropGuideTime] = useState<number | null>(null)
+  const [rawDropTime, setRawDropTime] = useState<number | null>(null) // For snap feedback
   const [scrollLeft, setScrollLeft] = useState(0)
   const [trimFeedback, setTrimFeedback] = useState<{
     itemId: string
@@ -60,6 +65,69 @@ export function Timeline() {
   } | null>(null)
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
+
+  // Snap utility function - returns snapped time and edge info
+  const snapTime = (time: number, excludeItemId?: string): { time: number; edgeType?: 'left' | 'right' | null } => {
+    if (!snapEnabled) return { time }
+    
+    const SNAP_THRESHOLD = snapInterval * 0.3 // 30% of interval as threshold
+    
+    // Collect all clip edges for snap-to-edges with type information
+    const edges: Array<{ position: number; type: 'left' | 'right' }> = []
+    if (snapToEdges) {
+      Object.values(trackItems).forEach(item => {
+        if (excludeItemId && item.id === excludeItemId) return
+        const itemStart = Number(item.trackPosition) || 0
+        const itemDuration = (Number(item.outSec) - Number(item.inSec)) || 0
+        const itemEnd = itemStart + itemDuration
+        edges.push(
+          { position: itemStart, type: 'left' },
+          { position: itemEnd, type: 'right' }
+        )
+      })
+    }
+    
+    // Check snap to edges first (priority)
+    if (snapToEdges && edges.length > 0) {
+      let nearestEdge: { position: number; type: 'left' | 'right' } | null = null
+      let nearestDistance = Infinity
+      
+      for (const edge of edges) {
+        const distance = Math.abs(time - edge.position)
+        if (distance < SNAP_THRESHOLD && distance < nearestDistance) {
+          nearestDistance = distance
+          nearestEdge = edge
+        }
+      }
+      
+      if (nearestEdge !== null) {
+        return { time: nearestEdge.position, edgeType: nearestEdge.type }
+      }
+    }
+    
+    // Snap to grid
+    const snapped = Math.round(time / snapInterval) * snapInterval
+    const distanceToSnap = Math.abs(time - snapped)
+    
+    if (distanceToSnap <= SNAP_THRESHOLD) {
+      return { time: snapped, edgeType: null }
+    }
+    
+    return { time, edgeType: null }
+  }
+
+  // Snap utility for drag-drop operations - adjusts position based on edge type and clip duration
+  const snapTimeForDrag = (time: number, clipDuration: number, excludeItemId?: string): number => {
+    const snapResult = snapTime(time, excludeItemId)
+    
+    // If snapping to a left edge, adjust position so clip's end aligns with that edge
+    if (snapResult.edgeType === 'left') {
+      return snapResult.time - clipDuration
+    }
+    
+    // For right edges or grid snaps, use the snapped position directly (start aligns)
+    return snapResult.time
+  }
 
   const beginResize = (e: React.MouseEvent, itemId: string, edge: 'left' | 'right') => {
     e.preventDefault()
@@ -99,7 +167,10 @@ export function Timeline() {
         }
         
         const trackDelta = newIn - r.startIn
-        const newTrackPos = clamp(r.startTrackPos + trackDelta, 0, Infinity)
+        const rawTrackPos = clamp(r.startTrackPos + trackDelta, 0, Infinity)
+        // Snap the left edge position
+        const snapResult = snapTime(rawTrackPos, r.itemId)
+        const newTrackPos = snapResult.time
         updateTrackItem(r.itemId, { inSec: newIn, trackPosition: newTrackPos })
         
         // Update feedback with new trim values
@@ -152,14 +223,28 @@ export function Timeline() {
   const pixelsPerSecond = BASE_PIXELS_PER_SEC * (zoom || 1)
   const AUTO_SCROLL_ENABLED = false
 
+  const draggedClipRef = useRef<{ clipId?: string; trackItemId?: string; duration?: number } | null>(null)
+
   const handleDragStart = (e: React.DragEvent, clipId: string) => {
     e.dataTransfer.setData('clipId', clipId)
     e.dataTransfer.effectAllowed = 'copy'
+    // Store clip info for drag-over preview
+    const clip = useStore.getState().clips[clipId]
+    draggedClipRef.current = { clipId, duration: clip?.duration }
   }
 
   const handleTrackItemDragStart = (e: React.DragEvent, trackItemId: string) => {
     e.dataTransfer.setData('trackItemId', trackItemId)
     e.dataTransfer.effectAllowed = 'move'
+    // Store track item info for drag-over preview
+    const item = useStore.getState().trackItems[trackItemId]
+    if (item) {
+      const clip = useStore.getState().clips[item.clipId]
+      if (clip) {
+        const itemDuration = (Number(item.outSec) - Number(item.inSec)) || clip.duration
+        draggedClipRef.current = { trackItemId, duration: itemDuration }
+      }
+    }
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -174,8 +259,20 @@ export function Timeline() {
           const mouseX = e.clientX - rect.left
           const scrollTop = scrollContainerRef.current?.scrollTop || 0
           const totalY = mouseY + scrollTop
-          const dropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
-          setDropGuideTime(dropTime)
+          const rawTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+          
+          // Use stored drag info for edge-aware snapping during preview
+          let snappedTime = rawTime
+          if (draggedClipRef.current?.duration) {
+            const excludeId = draggedClipRef.current.trackItemId || undefined
+            snappedTime = snapTimeForDrag(rawTime, draggedClipRef.current.duration, excludeId)
+          } else {
+            const snapResult = snapTime(rawTime)
+            snappedTime = snapResult.time
+          }
+          
+          setRawDropTime(rawTime)
+          setDropGuideTime(snappedTime)
           
           // Calculate track index based on cumulative track heights
           const sortedTracks = Object.values(tracks).sort((a, b) => a.order - b.order)
@@ -201,6 +298,8 @@ export function Timeline() {
     setDragOver(false)
     setHoveredTrackIndex(null)
     setDropGuideTime(null)
+    setRawDropTime(null)
+    draggedClipRef.current = null // Clear drag info
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -209,6 +308,8 @@ export function Timeline() {
     setDragOver(false)
     setHoveredTrackIndex(null)
     setDropGuideTime(null)
+    setRawDropTime(null)
+    draggedClipRef.current = null // Clear drag info
 
     console.log('[Timeline] Drop event triggered')
 
@@ -237,7 +338,13 @@ export function Timeline() {
 
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
-    const dropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+    const rawDropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+    
+    // Get clip and apply edge-aware snapping
+    const clip = useStore.getState().clips[clipId]
+    const clipDuration = clip?.duration || 10 // fallback
+    const dropTime = snapTimeForDrag(rawDropTime, clipDuration)
+    
     setDropGuideTime(dropTime)
 
     console.log('[Timeline] Drop at:', dropTime, 'seconds, y:', mouseY)
@@ -275,10 +382,6 @@ export function Timeline() {
     
     console.log('[Timeline] Target track:', targetTrack, 'index:', clampedIndex)
 
-    // Get clip from store to use actual duration
-    const clip = useStore.getState().clips[clipId]
-    const clipDuration = clip?.duration || 10 // fallback to 10 if no duration
-    
     // Create new track item
     const trackItem = {
       id: `trackitem-${Date.now()}-${Math.random()}`,
@@ -305,7 +408,18 @@ export function Timeline() {
 
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
-    const dropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+    const rawDropTime = (mouseX / pixelsPerSecond) + (scrollLeft / pixelsPerSecond)
+    
+    // Get clip duration from existing track item for edge-aware snapping
+    const existingItem = useStore.getState().trackItems[trackItemId]
+    let dropTime = rawDropTime
+    if (existingItem) {
+      const clip = useStore.getState().clips[existingItem.clipId]
+      if (clip) {
+        const itemDuration = (Number(existingItem.outSec) - Number(existingItem.inSec)) || clip.duration
+        dropTime = snapTimeForDrag(rawDropTime, itemDuration, trackItemId)
+      }
+    }
 
     // Calculate which track based on Y position
     const scrollTop = scrollContainerRef.current?.scrollTop || 0
@@ -332,7 +446,6 @@ export function Timeline() {
     console.log('[Timeline] Moving to track:', targetTrack.name, 'at time:', dropTime)
     
     // Update the track item
-    const existingItem = useStore.getState().trackItems[trackItemId]
     if (existingItem) {
       const updatedItem = {
         ...existingItem,
@@ -750,6 +863,17 @@ export function Timeline() {
             >
               ✂ Split
             </button>
+            <button
+              onClick={() => setSnapEnabled(!snapEnabled)}
+              className={`px-3 py-1 text-sm rounded font-medium transition-colors ${
+                snapEnabled
+                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                  : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
+              }`}
+              title={`Snap ${snapEnabled ? 'enabled' : 'disabled'} (${snapInterval}s grid${snapToEdges ? ', edges' : ''})`}
+            >
+              {snapEnabled ? '🔗 Snap' : 'Snap'}
+            </button>
             <div className="text-sm text-gray-400">
               {(() => { const ph = Math.floor(useStore.getState().ui.playheadSec || 0); return `Playhead: ${ph}s | Items: ${visibleItems.length}/${sortedItems.length}` })()}
             </div>
@@ -875,15 +999,41 @@ export function Timeline() {
         )}
 
         {dropGuideTime !== null && (
-          <div
-            className="absolute pointer-events-none"
-            style={{ zIndex: 9999, left: `${dropGuideTime * pixelsPerSecond}px`, top: 0, height: `${Math.max(Object.values(tracks).reduce((t, tr) => t + (tr.height || 80), 0), 400)}px` }}
-          >
-            <div className="absolute h-full" style={{ width: '2px', background: '#00e5ff', boxShadow: '0 0 10px 2px rgba(0,229,255,0.8)' }} />
-            <div className="absolute -top-7 -left-8 text-xs font-mono px-2 py-0.5 rounded" style={{ background: '#0b1020', color: '#7dd3fc', border: '1px solid #38bdf8' }}>
-              {dropGuideTime.toFixed(1)}s
+          <>
+            {/* Raw position indicator (faint) when snapping */}
+            {rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01 && (
+              <div
+                className="absolute pointer-events-none"
+                style={{ zIndex: 9998, left: `${rawDropTime * pixelsPerSecond}px`, top: 0, height: `${Math.max(Object.values(tracks).reduce((t, tr) => t + (tr.height || 80), 0), 400)}px` }}
+              >
+                <div className="absolute h-full" style={{ width: '1px', background: '#666', opacity: 0.4 }} />
+              </div>
+            )}
+            {/* Snapped position indicator */}
+            <div
+              className="absolute pointer-events-none"
+              style={{ zIndex: 9999, left: `${dropGuideTime * pixelsPerSecond}px`, top: 0, height: `${Math.max(Object.values(tracks).reduce((t, tr) => t + (tr.height || 80), 0), 400)}px` }}
+            >
+              <div 
+                className="absolute h-full" 
+                style={{ 
+                  width: '2px', 
+                  background: (rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01) ? '#ffd700' : '#00e5ff', 
+                  boxShadow: (rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01) ? '0 0 10px 2px rgba(255,215,0,0.8)' : '0 0 10px 2px rgba(0,229,255,0.8)' 
+                }} 
+              />
+              <div 
+                className="absolute -top-7 -left-8 text-xs font-mono px-2 py-0.5 rounded" 
+                style={{ 
+                  background: '#0b1020', 
+                  color: (rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01) ? '#ffd700' : '#7dd3fc', 
+                  border: (rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01) ? '1px solid #ffd700' : '1px solid #38bdf8' 
+                }}
+              >
+                {dropGuideTime.toFixed(1)}s {rawDropTime !== null && Math.abs(rawDropTime - dropGuideTime) > 0.01 && '⚡'}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Global playhead indicator (transform-based, DOM-driven) */}
