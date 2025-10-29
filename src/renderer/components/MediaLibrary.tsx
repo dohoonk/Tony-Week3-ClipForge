@@ -27,6 +27,16 @@ export function MediaLibrary() {
           const fileName = filePath.split('/').pop() || 'Unknown'
           const fileExt = fileName.split('.').pop() || ''
           
+          // Generate thumbnail (don't block on errors)
+          let thumbnailPath: string | undefined = undefined
+          try {
+            thumbnailPath = await window.clipforge.generateThumbnail(filePath)
+            console.log('[MediaLibrary] Generated thumbnail:', thumbnailPath)
+          } catch (thumbError) {
+            console.warn('[MediaLibrary] Failed to generate thumbnail:', thumbError)
+            // Continue without thumbnail
+          }
+          
           // Create clip object
           const clip: Clip = {
             id: `clip-${Date.now()}-${Math.random()}`,
@@ -35,6 +45,7 @@ export function MediaLibrary() {
             duration: metadata.duration,
             width: metadata.width,
             height: metadata.height,
+            thumbnailPath,
           }
           
           // Add to store
@@ -112,12 +123,28 @@ export function MediaLibrary() {
               draggable
               onDragStart={(e) => handleDragStart(e, clip.id)}
             >
-              {/* Thumbnail placeholder */}
-              <div className="aspect-video bg-gray-700 rounded mb-2 relative">
+              {/* Thumbnail */}
+              <div className="aspect-video bg-gray-700 rounded mb-2 relative overflow-hidden">
+                {clip.thumbnailPath ? (
+                  <img
+                    src={`file://${clip.thumbnailPath}`}
+                    alt={clip.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to placeholder if thumbnail fails to load
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
+                    Loading...
+                  </div>
+                )}
                 {/* Delete button */}
                 <button
                   onClick={() => handleDeleteClip(clip.id)}
-                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs z-10"
                 >
                   ×
                 </button>

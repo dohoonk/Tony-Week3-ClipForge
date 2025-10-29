@@ -77,13 +77,72 @@
 
 ---
 
+## 🚨 Must-Have Requirements (Before Deadline)
+
+### PR 23.1: media-library-thumbnails
+- [x] Generate thumbnail previews for video clips
+- [x] Display thumbnails in media library grid
+- [x] Cache thumbnails for performance
+- [x] Show thumbnail on hover or in clip card
+
+### PR 23.2: media-metadata-display
+- [ ] Display clip duration in media library
+- [ ] Show video resolution (width x height)
+- [ ] Display file size (MB/GB)
+- [ ] Add metadata tooltip or info panel
+- [ ] Format metadata values (e.g., "1920x1080", "125.5 MB")
+
+### PR 23.3: drag-drop-video-import
+- [ ] Accept MP4 files via drag-drop
+- [ ] Accept MOV files via drag-drop
+- [ ] Accept WebM files via drag-drop
+- [ ] Handle file drop on media library area
+- [ ] Validate file types before import
+- [ ] Show import progress/feedback
+
+### PR 23.4: clip-split-at-playhead
+- [ ] Add "Split" button to timeline controls
+- [ ] Split clip at current playhead position
+- [ ] Create two track items from one (left/right halves)
+- [ ] Update inSec/outSec for split clips
+- [ ] Maintain clip references correctly
+
+### PR 23.5: snap-to-grid-edges
+- [ ] Implement snap-to-grid (e.g., 0.5s intervals)
+- [ ] Implement snap-to-clip edges
+- [ ] Toggle snap on/off in UI
+- [ ] Visual feedback when snapping
+- [ ] Apply snap during drag-drop and trim
+
+### PR 23.6: export-resolution-options
+- [ ] Add resolution selector to export panel
+- [ ] Support 720p (1280x720)
+- [ ] Support 1080p (1920x1080)
+- [ ] Support source resolution (use original)
+- [ ] Apply resolution via FFmpeg scale filter
+- [ ] Update export UI with resolution dropdown
+
+---
+
 ## ✨ Effects & Overlays
 
-### PR 24: text-overlay-system
-- [ ] Create text overlay component
+### PR 24.1: text-overlay-ui
+- [ ] Create text overlay data structure and types
+- [ ] Add text overlay UI panel (properties editor)
+- [ ] Implement "Add Text Overlay" button
 - [ ] Add text properties (font, size, color, shadow)
-- [ ] Implement text positioning on timeline
+- [ ] Enable text positioning on timeline
+
+### PR 24.2: text-overlay-rendering
+- [ ] Render text overlays in Player component
+- [ ] Implement timeline visualization for text overlays
+- [ ] Add text overlay tracks to timeline
+- [ ] Enable drag-drop and positioning of text overlays
+
+### PR 24.3: text-overlay-ffmpeg
 - [ ] Add FFmpeg drawtext filter integration
+- [ ] Implement text rendering during export
+- [ ] Handle text overlay timestamps and positioning
 - [ ] Create text animation presets (fade, slide, zoom)
 
 ### PR 25: basic-transitions

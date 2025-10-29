@@ -7,6 +7,7 @@ export type Clip = {
   duration: number // seconds
   width: number
   height: number
+  thumbnailPath?: string // Path to generated thumbnail image
 }
 
 export type TrackItem = {

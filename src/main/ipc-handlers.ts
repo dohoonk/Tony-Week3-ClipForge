@@ -288,6 +288,29 @@ export function setupIpcHandlers() {
     }
   })
 
+  // generateThumbnail - Generate thumbnail from video file
+  ipcMain.handle('generateThumbnail', async (_event, filePath: string, timeOffset?: number) => {
+    console.log(`[IPC] generateThumbnail called for: ${filePath}`)
+    
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        throw new Error('Invalid path: path must be a non-empty string')
+      }
+
+      // Path sanitization
+      if (filePath.includes('..')) {
+        throw new Error('Invalid path: directory traversal not allowed')
+      }
+
+      const thumbnailPath = await ffmpegWrapper.generateThumbnail(filePath, undefined, timeOffset)
+      console.log(`[IPC] Thumbnail generated: ${thumbnailPath}`)
+      return thumbnailPath
+    } catch (error: any) {
+      console.error('[IPC] Thumbnail generation failed:', error)
+      throw error
+    }
+  })
+
   console.log('[IPC] All handlers registered successfully')
 }
 

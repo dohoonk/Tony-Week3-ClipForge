@@ -299,6 +299,86 @@ export class FFmpegWrapper extends EventEmitter {
       }
     })
   }
+
+  /**
+   * Generate a thumbnail from a video file
+   * @param filePath Path to video file
+   * @param thumbnailPath Optional output path for thumbnail (defaults to ~/.clipforge/thumbnails/{hash}.jpg)
+   * @param timeOffset Time in seconds to extract frame (defaults to 1s or 10% of duration)
+   * @returns Path to generated thumbnail
+   */
+  async generateThumbnail(filePath: string, thumbnailPath?: string, timeOffset?: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      // Check if file exists
+      if (!existsSync(filePath)) {
+        reject(new Error(`File does not exist: ${filePath}`))
+        return
+      }
+
+      // Generate thumbnail path if not provided
+      let finalThumbnailPath: string
+      if (!thumbnailPath) {
+        const os = require('os')
+        const path = require('path')
+        const crypto = require('crypto')
+        
+        // Create hash from file path for consistent thumbnail naming
+        const hash = crypto.createHash('md5').update(filePath).digest('hex')
+        const thumbnailDir = path.join(os.homedir(), '.clipforge', 'thumbnails')
+        
+        // Ensure thumbnail directory exists
+        const fs = require('fs')
+        if (!fs.existsSync(thumbnailDir)) {
+          fs.mkdirSync(thumbnailDir, { recursive: true })
+        }
+        
+        finalThumbnailPath = path.join(thumbnailDir, `${hash}.jpg`)
+      } else {
+        finalThumbnailPath = thumbnailPath
+      }
+
+      // Check if thumbnail already exists
+      if (existsSync(finalThumbnailPath)) {
+        console.log(`[FFmpeg] Thumbnail already exists: ${finalThumbnailPath}`)
+        resolve(finalThumbnailPath)
+        return
+      }
+
+      // Get video duration to determine thumbnail time
+      this.probe(filePath)
+        .then(metadata => {
+          // Use provided timeOffset, or 1 second, or 10% of duration (whichever is smallest)
+          const duration = metadata.duration
+          const thumbTime = timeOffset !== undefined 
+            ? timeOffset 
+            : Math.min(1, duration * 0.1)
+          
+          console.log(`[FFmpeg] Generating thumbnail at ${thumbTime}s for: ${filePath}`)
+          
+          ffmpeg(filePath)
+            .seekInput(thumbTime)
+            .frames(1)
+            .outputOptions([
+              '-vf', 'scale=320:-1', // Scale to 320px width, maintain aspect ratio
+              '-q:v', '2' // High quality JPEG
+            ])
+            .output(finalThumbnailPath)
+            .on('start', (commandLine: string) => {
+              console.log(`[FFmpeg] Thumbnail command: ${commandLine}`)
+            })
+            .on('end', () => {
+              console.log(`[FFmpeg] Thumbnail generated: ${finalThumbnailPath}`)
+              resolve(finalThumbnailPath)
+            })
+            .on('error', (err: Error) => {
+              console.error('[FFmpeg] Thumbnail generation failed:', err)
+              reject(new Error(`Failed to generate thumbnail: ${err.message}`))
+            })
+            .run()
+        })
+        .catch(reject)
+    })
+  }
 }
 
 // Singleton instance

@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('clipforge', {
   // File operations
   openFiles: () => ipcRenderer.invoke('openFiles'),
   probe: (path: string) => ipcRenderer.invoke('probe', path),
+  generateThumbnail: (path: string, timeOffset?: number) => 
+    ipcRenderer.invoke('generateThumbnail', path, timeOffset),
   
   // Project operations
   saveProject: (project: any, path?: string) => 

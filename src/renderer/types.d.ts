@@ -5,6 +5,7 @@ interface Window {
     // File operations
     openFiles: () => Promise<string[]>
     probe: (path: string) => Promise<{ duration: number; width: number; height: number }>
+    generateThumbnail: (path: string, timeOffset?: number) => Promise<string>
     
     // Project operations
     saveProject: (project: Project, path?: string) => Promise<string>
