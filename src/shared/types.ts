@@ -9,6 +9,7 @@ export type Clip = {
   height: number
   fileSize?: number // File size in bytes
   thumbnailPath?: string // Path to generated thumbnail image
+  hash?: string // SHA-1 hash for transcript caching (AI feature)
 }
 
 export type TrackItem = {
@@ -58,5 +59,36 @@ export type ClipForgeState = {
     snapInterval: number // snap grid interval in seconds (e.g., 0.5)
     snapToEdges: boolean // snap to clip edges enabled
   }
+}
+
+// AI-related types for transcription and filler detection
+export type Transcript = {
+  words: Array<{
+    text: string
+    startSec: number
+    endSec: number
+    confidence: number
+  }>
+  durationSec: number
+  audioDurationSec: number
+  modelVersion: string
+}
+
+export type FillerSpan = {
+  clipId: string
+  word: string
+  startSec: number
+  endSec: number
+  confidence: number
+  paddedStart: number
+  paddedEnd: number
+}
+
+export type CutPlan = {
+  trackItemId: string
+  cuts: Array<{
+    startSec: number
+    endSec: number
+  }>
 }
 

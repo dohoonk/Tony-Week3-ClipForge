@@ -3,6 +3,7 @@ import { MediaLibrary } from './components/MediaLibrary'
 import { Timeline } from './components/Timeline'
 import { Player } from './components/Player'
 import { ExportPanel } from './components/ExportPanel'
+import { TranscriptionTestPanel } from './components/TranscriptionTestPanel'
 
 function App() {
   const [timelineHeight, setTimelineHeight] = useState(33) // Percentage of available height
@@ -94,6 +95,7 @@ function App() {
           </div>
         </div>
         <ExportPanel />
+        <TranscriptionTestPanel />
       </main>
     </div>
   )

@@ -55,14 +55,22 @@ export function MediaLibrary() {
   }
 
   // Process files (shared logic for both import button and drag-drop)
-  const processFiles = async (filePaths: string[]) => {
+  // Accepts either string[] (legacy) or Array<{path, hash}> (new format)
+  const processFiles = async (fileData: string[] | Array<{ path: string; hash?: string }>) => {
     try {
       setIsImporting(true)
-      console.log('[MediaLibrary] Processing files:', filePaths)
+      console.log('[MediaLibrary] Processing files:', fileData)
+
+      // Normalize input: convert string[] to {path, hash}[] format
+      const files = fileData.map(item => 
+        typeof item === 'string' 
+          ? { path: item, hash: undefined }
+          : item
+      )
 
       // Filter to only valid video files
-      const validFiles = filePaths.filter(filePath => {
-        const fileName = filePath.split('/').pop() || ''
+      const validFiles = files.filter(file => {
+        const fileName = file.path.split('/').pop() || ''
         if (!isValidVideoFile(fileName)) {
           console.warn('[MediaLibrary] Skipping invalid file:', fileName)
           return false
@@ -76,8 +84,11 @@ export function MediaLibrary() {
       }
 
       // Process each file
-      for (const filePath of validFiles) {
+      for (const file of validFiles) {
         try {
+          const filePath = file.path
+          const fileHash = file.hash
+          
           // Get video metadata
           const metadata = await window.clipforge.probe(filePath)
           
@@ -104,6 +115,7 @@ export function MediaLibrary() {
             height: metadata.height,
             fileSize: metadata.fileSize,
             thumbnailPath,
+            hash: fileHash, // Include hash if available (from ingest)
           }
           
           // Add to store
@@ -111,7 +123,7 @@ export function MediaLibrary() {
           
           console.log('[MediaLibrary] Added clip:', clip)
         } catch (error) {
-          console.error('[MediaLibrary] Failed to process file:', filePath, error)
+          console.error('[MediaLibrary] Failed to process file:', file.path, error)
         }
       }
     } catch (error) {
@@ -148,7 +160,7 @@ export function MediaLibrary() {
     }
 
     // Process files: read as ArrayBuffer, send via IPC, then process
-    const filePaths: string[] = []
+    const savedFiles: Array<{ path: string; hash: string }> = []
     
     for (const file of files) {
       // Validate file type first
@@ -163,16 +175,16 @@ export function MediaLibrary() {
         const uint8Array = new Uint8Array(arrayBuffer)
         
         // Send to main process to save
-        const savedPath = await window.clipforge.saveDroppedFile(uint8Array, file.name)
-        filePaths.push(savedPath)
-        console.log('[MediaLibrary] Saved dropped file:', savedPath)
+        const savedFile = await window.clipforge.saveDroppedFile(uint8Array, file.name)
+        savedFiles.push({ path: savedFile.path, hash: savedFile.hash })
+        console.log('[MediaLibrary] Saved dropped file:', savedFile.path, 'hash:', savedFile.hash)
       } catch (error) {
         console.error('[MediaLibrary] Failed to save dropped file:', file.name, error)
       }
     }
 
-    if (filePaths.length > 0) {
-      await processFiles(filePaths)
+    if (savedFiles.length > 0) {
+      await processFiles(savedFiles)
     } else {
       console.warn('[MediaLibrary] No valid files processed from drop')
     }
