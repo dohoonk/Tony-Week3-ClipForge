@@ -72,8 +72,8 @@
 - [x] Add trim handles to timeline clips
 - [x] Implement drag-to-resize functionality
 - [x] Update inSec/outSec on trim
-- [ ] Add visual feedback for trim bounds
-- [ ] Validate trim constraints
+- [x] Add visual feedback for trim bounds
+- [x] Validate trim constraints
 
 ---
 

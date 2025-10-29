@@ -35,6 +35,13 @@ export function Timeline() {
   const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null)
   const [dropGuideTime, setDropGuideTime] = useState<number | null>(null)
   const [scrollLeft, setScrollLeft] = useState(0)
+  const [trimFeedback, setTrimFeedback] = useState<{
+    itemId: string
+    inSec: number
+    outSec: number
+    duration: number
+    isConstrained?: boolean
+  } | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const playheadRef = useRef<HTMLDivElement>(null)
   const playheadLabelRef = useRef<HTMLDivElement>(null)
@@ -76,16 +83,57 @@ export function Timeline() {
       if (!r) return
       const deltaPx = ev.clientX - r.startClientX
       const deltaSec = deltaPx / pixelsPerSecond
+      let isConstrained = false
+      
       if (r.edge === 'left') {
         const proposedIn = r.startIn + deltaSec
         const newIn = clamp(proposedIn, 0, r.startOut - MIN_SEGMENT_SEC)
+        
+        // Check if we hit a constraint
+        if (newIn <= 0) {
+          // Can't trim past the start of the clip
+          isConstrained = true
+        } else if (r.startOut - newIn < MIN_SEGMENT_SEC) {
+          // Can't trim below minimum duration
+          isConstrained = true
+        }
+        
         const trackDelta = newIn - r.startIn
         const newTrackPos = clamp(r.startTrackPos + trackDelta, 0, Infinity)
         updateTrackItem(r.itemId, { inSec: newIn, trackPosition: newTrackPos })
+        
+        // Update feedback with new trim values
+        setTrimFeedback({
+          itemId: r.itemId,
+          inSec: newIn,
+          outSec: r.startOut,
+          duration: r.startOut - newIn,
+          isConstrained
+        })
       } else {
         const proposedOut = r.startOut + deltaSec
-        const newOut = clamp(proposedOut, (r.startIn + MIN_SEGMENT_SEC), r.clipDuration || (r.startOut + 0))
+        const maxOut = r.clipDuration || r.startOut
+        const newOut = clamp(proposedOut, (r.startIn + MIN_SEGMENT_SEC), maxOut)
+        
+        // Check if we hit a constraint
+        if (newOut >= maxOut) {
+          // Can't trim past the end of the clip
+          isConstrained = true
+        } else if (newOut - r.startIn < MIN_SEGMENT_SEC) {
+          // Can't trim below minimum duration
+          isConstrained = true
+        }
+        
         updateTrackItem(r.itemId, { outSec: newOut })
+        
+        // Update feedback with new trim values
+        setTrimFeedback({
+          itemId: r.itemId,
+          inSec: r.startIn,
+          outSec: newOut,
+          duration: newOut - r.startIn,
+          isConstrained
+        })
       }
     }
 
@@ -93,6 +141,7 @@ export function Timeline() {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       resizingRef.current = null
+      setTrimFeedback(null) // Clear feedback when done trimming
     }
 
     window.addEventListener('mousemove', onMove)
@@ -800,7 +849,7 @@ export function Timeline() {
                     return (
                       <div
                         key={item.id}
-                        className="group absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20"
+                        className={`group absolute bg-purple-600 border-2 border-purple-400 cursor-pointer hover:bg-purple-500 hover:border-purple-300 transition-all shadow-lg z-20 ${trimFeedback?.itemId === item.id ? 'ring-2 ring-blue-400' : ''}`}
                         style={{
                           left: `${item.trackPosition * pixelsPerSecond}px`,
                           width: `${itemWidth}px`,
@@ -815,6 +864,14 @@ export function Timeline() {
                         <div className="p-2 text-white text-xs truncate">
                           {clip?.name || 'TrackItem'}
                         </div>
+                        {/* Visual overlay when trimming */}
+                        {trimFeedback?.itemId === item.id && (
+                          <div className={`absolute inset-0 border-2 ${
+                            trimFeedback.isConstrained 
+                              ? 'bg-red-500/20 border-red-400' 
+                              : 'bg-blue-500/20 border-blue-400'
+                          }`} />
+                        )}
                         {/* Trim handles */}
                         <div
                           className="absolute left-0 top-0 h-full cursor-ew-resize opacity-80 group-hover:opacity-100"
@@ -842,6 +899,25 @@ export function Timeline() {
         {visibleItems.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="text-gray-500 text-lg">Drag clips from Media Library here</p>
+          </div>
+        )}
+        
+        {/* Trim feedback tooltip */}
+        {trimFeedback && (
+          <div className={`fixed pointer-events-none z-[9999] text-xs px-2 py-1 rounded shadow-lg ${
+            trimFeedback.isConstrained 
+              ? 'bg-red-900/90 text-red-200 border-red-400' 
+              : 'bg-black/90 text-white border-blue-400'
+          } border`}>
+            <div className={`font-bold ${trimFeedback.isConstrained ? 'text-red-400' : 'text-blue-400'}`}>
+              {trimFeedback.isConstrained ? '⚠ Constraint Hit' : 'Trim Info'}
+            </div>
+            <div>In: {trimFeedback.inSec.toFixed(2)}s</div>
+            <div>Out: {trimFeedback.outSec.toFixed(2)}s</div>
+            <div>Duration: {trimFeedback.duration.toFixed(2)}s</div>
+            {trimFeedback.isConstrained && (
+              <div className="text-xs mt-1 text-orange-300">Min: {MIN_SEGMENT_SEC}s</div>
+            )}
           </div>
         )}
         </div>
