@@ -535,17 +535,75 @@ export function Player() {
         }
         
         // Try to probe the recorded file for full metadata
+        // Wait for file to exist with retries (file may still be writing)
         let fullMetadata = metadata
         
+        // Give file system a moment to flush before first attempt
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        const waitForFileAndProbe = async (maxRetries = 10, delayMs = 500) => {
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+              const probedData = await window.clipforge.probe(path)
+              return probedData
+            } catch (error: any) {
+              const isFileNotFound = error?.message?.includes('does not exist') || 
+                                    error?.message?.includes('File does not exist')
+              
+              if (isFileNotFound && attempt < maxRetries - 1) {
+                // File not ready yet, wait and retry
+                console.log(`[Player] File not ready (attempt ${attempt + 1}/${maxRetries}), waiting ${delayMs}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delayMs))
+                continue
+              }
+              
+              // Last attempt failed or different error - throw to use fallback
+              throw error
+            }
+          }
+          throw new Error('Max retries reached')
+        }
+        
         try {
-          // Attempt to probe the actual file
-          const probedData = await window.clipforge.probe(path)
+          const probedData = await waitForFileAndProbe()
           fullMetadata = probedData
           console.log('[Player] Successfully probed recorded file')
         } catch (probeError) {
-          // If probe fails (mock recording or file doesn't exist yet),
-          // use the metadata from the completion event
-          console.warn('[Player] Probe failed, using event metadata:', probeError)
+          // If probe fails after retries, use the metadata from the completion event
+          console.warn('[Player] Probe failed after retries, using event metadata:', probeError)
+        }
+        
+        // Generate thumbnail with retries (don't block on errors)
+        let thumbnailPath: string | undefined = undefined
+        const waitForFileAndThumbnail = async (maxRetries = 10, delayMs = 500) => {
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+              const thumbPath = await window.clipforge.generateThumbnail(path)
+              return thumbPath
+            } catch (error: any) {
+              const isFileNotFound = error?.message?.includes('does not exist') || 
+                                    error?.message?.includes('File does not exist')
+              
+              if (isFileNotFound && attempt < maxRetries - 1) {
+                // File not ready yet, wait and retry
+                console.log(`[Player] Thumbnail: file not ready (attempt ${attempt + 1}/${maxRetries}), waiting ${delayMs}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delayMs))
+                continue
+              }
+              
+              // Last attempt failed or different error - throw
+              throw error
+            }
+          }
+          throw new Error('Max retries reached')
+        }
+        
+        try {
+          thumbnailPath = await waitForFileAndThumbnail()
+          console.log('[Player] Generated thumbnail for recording:', thumbnailPath)
+        } catch (thumbError) {
+          console.warn('[Player] Failed to generate thumbnail after retries:', thumbError)
+          // Continue without thumbnail
         }
         
         const fileName = path.split('/').pop() || `recording_${Date.now()}.webm`
@@ -559,6 +617,8 @@ export function Player() {
           duration: metadata.duration || fullMetadata.duration || 0, // Temporary duration
           width: fullMetadata.width || metadata.width || 1920,
           height: fullMetadata.height || metadata.height || 1080,
+          fileSize: fullMetadata.fileSize,
+          thumbnailPath,
         }
         
         // Add to media library
