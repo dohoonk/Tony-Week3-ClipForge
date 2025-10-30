@@ -18,7 +18,7 @@ export type Config = {
  * Uses Electron safeStorage for secure key encryption.
  */
 class ConfigService {
-  private readonly CONFIG_DIR = join(homedir(), '.clipforge')
+  private readonly CONFIG_DIR = join(homedir(), '.interviewmate')
   private readonly CONFIG_FILE = join(this.CONFIG_DIR, 'config.json')
 
   constructor() {

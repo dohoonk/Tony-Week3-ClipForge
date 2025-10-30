@@ -67,7 +67,7 @@ export class WhisperRunner extends EventEmitter {
    */
   private async extractAudioForWhisper(videoPath: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const tempAudioPath = join(tmpdir(), `clipforge-whisper-${randomUUID()}.wav`)
+      const tempAudioPath = join(tmpdir(), `interviewmate-whisper-${randomUUID()}.wav`)
       
       console.log(`[Whisper] Extracting audio to: ${tempAudioPath}`)
       

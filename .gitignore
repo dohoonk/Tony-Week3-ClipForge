@@ -31,9 +31,9 @@ bin/whisper/
 bin/mac/
 
 # User config and data (contains sensitive API keys - NEVER commit!)
-.clipforge/
+.interviewmate/
 config.json
-*.clipforge.json
+*.interviewmate.json
 
 # Sample video
 sample.MP4

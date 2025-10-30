@@ -91,7 +91,7 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
       <header className="p-4 border-b border-gray-700 bg-gray-800 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-white">ClipForge</h1>
+               <h1 className="text-2xl font-bold text-white">InterviewMate</h1>
         <button
           onClick={() => setIsSettingsOpen(true)}
           className="p-2 text-gray-400 hover:text-white transition-colors"

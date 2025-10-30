@@ -7,11 +7,11 @@ import type { Transcript } from '../../shared/types'
  * Transcript Cache Service
  * 
  * Caches Whisper transcription results to disk using file hash as key.
- * Cache directory: ~/.clipforge/cache/transcripts/
+ * Cache directory: ~/.interviewmate/cache/transcripts/
  * Cache file format: JSON files named by hash (e.g., `abc123def456.json`)
  */
 export class TranscriptCache {
-  private readonly CACHE_DIR = join(homedir(), '.clipforge', 'cache', 'transcripts')
+  private readonly CACHE_DIR = join(homedir(), '.interviewmate', 'cache', 'transcripts')
 
   constructor() {
     this.ensureCacheDir()

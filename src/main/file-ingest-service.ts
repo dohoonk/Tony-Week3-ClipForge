@@ -4,7 +4,7 @@ import { homedir } from 'os'
 import { randomUUID, createHash } from 'crypto'
 
 export class FileIngestService {
-  private readonly CLIPS_DIR = join(homedir(), '.clipforge', 'clips')
+  private readonly CLIPS_DIR = join(homedir(), '.interviewmate', 'clips')
 
   constructor() {
     this.ensureClipsDir()
@@ -30,7 +30,7 @@ export class FileIngestService {
   }
 
   /**
-   * Ingest a file by copying it to ~/.clipforge/clips/ with a UUID filename
+   * Ingest a file by copying it to ~/.interviewmate/clips/ with a UUID filename
    * @param sourcePath Original file path
    * @returns Object with new file path and calculated hash
    */

@@ -1,6 +1,6 @@
-# ClipForge
+# InterviewMate
 
-Desktop Electron video editor for quick edits: record (Screen/Webcam/PiP), arrange on a multi-track timeline, preview, and export.
+Desktop Electron video editor for interview preparation and editing: record (Screen/Webcam/PiP), arrange on a multi-track timeline, preview, and export with AI-powered filler removal.
 
 ## ✨ Features
 
@@ -12,7 +12,7 @@ Desktop Electron video editor for quick edits: record (Screen/Webcam/PiP), arran
 
 - **Recording**
   - Screen, Webcam, PiP (Screen + Webcam) with live preview
-  - Auto-import to Media Library from `~/Movies/ClipForge/recordings/`
+  - Auto-import to Media Library from `~/Movies/InterviewMate/recordings/`
 
 - **Project IO**
   - Robust serialize/deserialize; preserves empty tracks and correct order
@@ -24,6 +24,11 @@ Desktop Electron video editor for quick edits: record (Screen/Webcam/PiP), arran
 - **Export (FFmpeg)**
   - Per-item trim/offset, concat to MP4 (H.264)
   - Handles silent inputs (video-only export when no audio)
+
+- **AI-Powered Features**
+  - Automatic filler word detection and removal
+  - Script review and improvement suggestions
+  - Local Whisper.cpp transcription (no cloud required)
 
 ## ✅ Requirements
 
@@ -63,12 +68,12 @@ npm run package:mac
 ```
 
 Artifacts in `release/`:
-- `ClipForge-<version>.dmg` (Intel x64)
-- `ClipForge-<version>-arm64.dmg` (Apple Silicon)
+- `InterviewMate-<version>.dmg` (Intel x64)
+- `InterviewMate-<version>-arm64.dmg` (Apple Silicon)
 
 Unsigned app: right-click → Open. If Gatekeeper blocks:
 ```bash
-xattr -dr com.apple.quarantine /Applications/ClipForge.app
+xattr -dr com.apple.quarantine /Applications/InterviewMate.app
 ```
 
 ## 🧭 Workflow
@@ -95,9 +100,9 @@ xattr -dr com.apple.quarantine /Applications/ClipForge.app
 
 ## 🗑️ Uninstall/Reinstall (macOS)
 
-1) Quit ClipForge
-2) Delete `/Applications/ClipForge.app`
-3) Optional reset: `~/Library/Application Support/ClipForge/`, `~/.clipforge/`, `~/Movies/ClipForge/`
+1) Quit InterviewMate
+2) Delete `/Applications/InterviewMate.app`
+3) Optional reset: `~/Library/Application Support/InterviewMate/`, `~/.interviewmate/`, `~/Movies/InterviewMate/`
 4) Install the correct DMG (x64 for Intel, arm64 for Apple Silicon)
 
 ## 📁 Project Structure
@@ -113,6 +118,7 @@ src/
 ## 📝 Notes
 
 - In dev, system FFmpeg is used. Packaged builds set paths via the wrapper.
+- AI features require Whisper.cpp binaries and model files (bundled in packaged app).
 - WebM "Infinity duration" is handled via a guarded metadata workaround.
 
 ---

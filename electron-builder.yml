@@ -1,5 +1,5 @@
-appId: com.clipforge.app
-productName: ClipForge
+appId: com.interviewmate.app
+productName: InterviewMate
 directories:
   output: release
   buildResources: build
@@ -44,6 +44,6 @@ mac:
         - arm64
 
 dmg:
-  title: ClipForge
+  title: InterviewMate
   backgroundColor: "#ffffff"
 
