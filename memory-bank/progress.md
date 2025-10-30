@@ -1,4 +1,4 @@
-# Progress: ClipForge
+# Progress: InterviewMate
 
 ## What Works
 - Project documentation and architecture defined

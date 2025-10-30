@@ -1,4 +1,4 @@
-# System Patterns: ClipForge
+# System Patterns: InterviewMate
 
 ## Architecture Overview
 

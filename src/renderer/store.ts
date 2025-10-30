@@ -33,6 +33,11 @@ interface ClipForgeActions {
   addTrackItem: (item: any) => void
   removeTrackItem: (itemId: string) => void
   updateTrackItem: (itemId: string, updates: Partial<any>) => void
+  batchUpdateTrackItems: (updates: {
+    add?: any[]
+    remove?: string[]
+    update?: Array<{ id: string; updates: Partial<any> }>
+  }) => void
   
   // UI actions
   setPlayheadSec: (seconds: number) => void
@@ -42,6 +47,11 @@ interface ClipForgeActions {
   setSnapEnabled: (enabled: boolean) => void
   setSnapInterval: (interval: number) => void
   setSnapToEdges: (enabled: boolean) => void
+  
+  // AI undo support
+  lastAITrackItemsSnapshot: Record<string, any> | null
+  setLastAITrackItemsSnapshot: (snapshot: Record<string, any> | null) => void
+  undoLastAICuts: () => void
 }
 
 type ClipForgeStore = ClipForgeState & ClipForgeActions
@@ -67,6 +77,7 @@ export const useStore = create<ClipForgeStore>((set) => ({
     }
   },
   trackItems: {},
+  lastAITrackItemsSnapshot: null, // Snapshot for undo
   ui: {
     playheadSec: 0,
     zoom: 1,
@@ -178,6 +189,54 @@ export const useStore = create<ClipForgeStore>((set) => ({
   updateTrackItem: (itemId: string, updates: Partial<any>) => set((state) => ({
     trackItems: { ...state.trackItems, [itemId]: { ...state.trackItems[itemId], ...updates } }
   })),
+  
+  batchUpdateTrackItems: (updates: {
+    add?: any[]
+    remove?: string[]
+    update?: Array<{ id: string; updates: Partial<any> }>
+  }) => set((state) => {
+    let newTrackItems = { ...state.trackItems }
+    
+    // Remove items
+    if (updates.remove) {
+      for (const id of updates.remove) {
+        const { [id]: _, ...rest } = newTrackItems
+        newTrackItems = rest
+      }
+    }
+    
+    // Update items
+    if (updates.update) {
+      for (const { id, updates: itemUpdates } of updates.update) {
+        if (newTrackItems[id]) {
+          newTrackItems[id] = { ...newTrackItems[id], ...itemUpdates }
+        }
+      }
+    }
+    
+    // Add items
+    if (updates.add) {
+      for (const item of updates.add) {
+        newTrackItems[item.id] = item
+      }
+    }
+    
+    return { trackItems: newTrackItems }
+  }),
+  
+  setLastAITrackItemsSnapshot: (snapshot: Record<string, any> | null) => set({ lastAITrackItemsSnapshot: snapshot }),
+  
+  undoLastAICuts: () => set((state) => {
+    if (!state.lastAITrackItemsSnapshot) {
+      console.warn('[Store] No AI snapshot to undo')
+      return {}
+    }
+    console.log('[Store] Undoing last AI cuts, restoring', Object.keys(state.lastAITrackItemsSnapshot).length, 'items')
+    return {
+      trackItems: { ...state.lastAITrackItemsSnapshot },
+      lastAITrackItemsSnapshot: null,
+    }
+  }),
   
   setPlayheadSec: (seconds: number) => set((state) => ({
     ui: { ...state.ui, playheadSec: seconds }

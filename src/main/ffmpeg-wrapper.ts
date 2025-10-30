@@ -183,8 +183,9 @@ export class FFmpegWrapper extends EventEmitter {
         }
         command.input(clip.path)
       }
-      // Determine audio presence per input
+      // Determine audio presence per input and extract durations
       const clipHasAudio: Record<string, boolean> = {}
+      const clipDurations: Record<string, number> = {}
       let hasAnyAudio = false
       let remaining = uniqueClipIds.length
       const afterProbe = () => {
@@ -201,6 +202,12 @@ export class FFmpegWrapper extends EventEmitter {
           clipIndexMap[clipId] = inputIndex++
         }
         
+        // Check if all segments will have audio before creating filters
+        const allSegmentsHaveAudio = hasAnyAudio && sortedItems.every((item: any) => {
+          const itemData = item as any
+          return clipHasAudio[itemData.clipId]
+        })
+        
         // Generate trim filters for each trackItem
         let streamIndex = 0
         for (const item of sortedItems) {
@@ -212,21 +219,58 @@ export class FFmpegWrapper extends EventEmitter {
           
           // Calculate trim: [inSec, outSec]
           // Then offset by trackPosition for placement
-          const inSec = itemData.inSec || 0
-          const outSec = itemData.outSec || clip.duration
-          const position = itemData.trackPosition || 0
+          let inSec = itemData.inSec || 0
+          let outSec = itemData.outSec
+          
+          // Get duration from probed data or clip, validate
+          const clipDuration = clipDurations[itemData.clipId] || clip.duration
+          if (!outSec || isNaN(outSec) || outSec <= inSec) {
+            if (clipDuration && !isNaN(clipDuration) && clipDuration > 0) {
+              outSec = clipDuration
+            } else {
+              console.warn(`[FFmpeg] Invalid duration for clip ${itemData.clipId}, skipping item (clipDuration=${clipDuration})`)
+              continue
+            }
+          }
+          
+          // Validate trim range - ensure outSec doesn't exceed clip duration
+          if (clipDuration && !isNaN(clipDuration) && outSec > clipDuration) {
+            console.warn(`[FFmpeg] Trim outSec (${outSec}) exceeds clip duration (${clipDuration}), clamping to duration`)
+            outSec = clipDuration
+          }
+          
+          // Validate trim range
+          if (isNaN(inSec) || inSec < 0 || isNaN(outSec) || outSec <= inSec) {
+            console.warn(`[FFmpeg] Invalid trim range for clip ${itemData.clipId}: inSec=${inSec}, outSec=${outSec}, skipping item`)
+            continue
+          }
+          
+          // Format numbers to avoid precision issues
+          const inSecFormatted = Number(inSec.toFixed(6))
+          const outSecFormatted = Number(outSec.toFixed(6))
           
           // Trim video and audio
           const videoLabel = `v${streamIndex}`
           const audioLabel = `a${streamIndex}`
           
-          // Video filter
-          filterParts.push(`[${inputIndex}:v]trim=${inSec}:${outSec},setpts=PTS-STARTPTS+${position}/TB[${videoLabel}]`)
+          // Determine target resolution for scaling
+          let scaleFilter = ''
+          if (resolution === '720p') {
+            scaleFilter = ',scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2'
+          } else if (resolution === '1080p') {
+            scaleFilter = ',scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2'
+          }
+          // For 'source' resolution, we still need to scale to a common size for concat
+          // Use the first clip's resolution as the target for source mode
+          
+          // Video filter - trim, reset timestamps, and scale to target resolution
+          // Scale is applied BEFORE concat to ensure all inputs have matching dimensions
+          filterParts.push(`[${inputIndex}:v]trim=start=${inSecFormatted}:end=${outSecFormatted},setpts=PTS-STARTPTS${scaleFilter}[${videoLabel}]`)
           videoConcatInputs.push(`[${videoLabel}]`)
           
-          // Audio filter (only if inputs have audio)
-          if (hasAnyAudio && clipHasAudio[itemData.clipId]) {
-            filterParts.push(`[${inputIndex}:a]atrim=${inSec}:${outSec},asetpts=PTS-STARTPTS+${position}/TB[${audioLabel}]`)
+          // Audio filter (only if ALL segments have audio, to avoid orphaned outputs)
+          if (allSegmentsHaveAudio && clipHasAudio[itemData.clipId]) {
+            filterParts.push(`[${inputIndex}:a]atrim=start=${inSecFormatted}:end=${outSecFormatted},asetpts=PTS-STARTPTS[${audioLabel}]`)
             audioConcatInputs.push(`[${audioLabel}]`)
           }
           
@@ -234,29 +278,16 @@ export class FFmpegWrapper extends EventEmitter {
         }
         
         // Concatenate all trimmed segments (video and audio)
+        // Note: All segments are already scaled to target resolution before concat
         if (videoConcatInputs.length > 0) {
-          // Concatenate video
-          const videoConcatLabel = resolution === 'source' ? 'outv' : 'concatv'
-          filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[${videoConcatLabel}]`)
+          // Concatenate video - all inputs already have matching dimensions
+          filterParts.push(`${videoConcatInputs.join('')}concat=n=${videoConcatInputs.length}:v=1:a=0[outv]`)
           
-          // Apply scale filter if resolution is specified (not source)
-          if (resolution !== 'source') {
-            let scaleFilter = ''
-            if (resolution === '720p') {
-              scaleFilter = '[concatv]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[outv]'
-            } else if (resolution === '1080p') {
-              scaleFilter = '[concatv]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[outv]'
-            }
-            if (scaleFilter) {
-              filterParts.push(scaleFilter)
-            }
-          }
-          
-          const audioUsable = hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length
-          if (audioUsable) {
+          // Use audio only if all segments have audio (audio filters were created)
+          if (allSegmentsHaveAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length) {
             filterParts.push(`${audioConcatInputs.join('')}concat=n=${audioConcatInputs.length}:v=0:a=1[outa]`)
-          } else if (hasAnyAudio && audioConcatInputs.length !== videoConcatInputs.length) {
-            console.warn('[FFmpeg] Skipping audio concat due to mismatched segment counts:', {
+          } else if (hasAnyAudio && !allSegmentsHaveAudio) {
+            console.warn('[FFmpeg] Skipping audio concat: not all segments have audio', {
               videoSegments: videoConcatInputs.length,
               audioSegments: audioConcatInputs.length,
             })
@@ -266,12 +297,14 @@ export class FFmpegWrapper extends EventEmitter {
           console.log(`[FFmpeg] Filter complex: ${filterComplex}`)
           console.log(`[FFmpeg] Export resolution: ${resolution}`)
           
+          const useAudio = allSegmentsHaveAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length
           command
             .complexFilter(filterComplex)
-            .outputOptions(['-map [outv]'])
-            .outputOptions((hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length) ? ['-map [outa]'] : ['-an'])
-            .outputOptions(['-c:v libx264', '-preset veryfast', '-crf 20'])
-            .outputOptions((hasAnyAudio && audioConcatInputs.length > 0 && audioConcatInputs.length === videoConcatInputs.length) ? ['-c:a aac', '-b:a 192k'] : [])
+            .outputOptions(['-map', '[outv]'])
+            .outputOptions(useAudio ? ['-map', '[outa]'] : ['-an'])
+            .outputOptions(['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20'])
+            .outputOptions(useAudio ? ['-c:a', 'aac', '-b:a', '192k'] : [])
+            .outputOptions(['-pix_fmt', 'yuv420p']) // Ensure compatible pixel format
             .on('start', (cmdline) => {
               console.log('[FFmpeg] Export started:', cmdline)
             })
@@ -288,8 +321,9 @@ export class FFmpegWrapper extends EventEmitter {
               this.emit('export:end', { outputPath })
               resolve()
             })
-            .on('error', (err) => {
+            .on('error', (err, stdout, stderr) => {
               console.error('[FFmpeg] Export error:', err)
+              console.error('[FFmpeg] stderr output:', stderr)
               reject(err)
             })
             .save(outputPath)
@@ -307,13 +341,43 @@ export class FFmpegWrapper extends EventEmitter {
         if (!clip) { if (--remaining === 0) afterProbe(); continue }
         try {
           ffmpeg(clip.path).ffprobe((err, md) => {
-            const has = !err && (md?.streams || []).some((s: any) => s.codec_type === 'audio')
-            clipHasAudio[clipId] = !!has
-            if (has) hasAnyAudio = true
+            if (!err && md) {
+              // Check for audio
+              const has = (md?.streams || []).some((s: any) => s.codec_type === 'audio')
+              clipHasAudio[clipId] = !!has
+              if (has) hasAnyAudio = true
+              
+              // Extract duration from metadata
+              let duration = md.format?.duration
+              if (!duration && md.format) {
+                // Try to calculate from bitrate if available
+                const size = md.format.size ? Number(md.format.size) : null
+                const bitrate = md.format.bit_rate ? Number(md.format.bit_rate) : null
+                if (size && bitrate && bitrate > 0) {
+                  duration = size * 8 / bitrate
+                }
+              }
+              if (duration && !isNaN(Number(duration)) && Number(duration) > 0) {
+                clipDurations[clipId] = Number(duration)
+              } else if (clip.duration && !isNaN(clip.duration) && clip.duration > 0) {
+                // Fallback to clip.duration if probe didn't find it
+                clipDurations[clipId] = clip.duration
+              }
+            } else {
+              clipHasAudio[clipId] = false
+              // Fallback to clip.duration if probe failed
+              if (clip.duration && !isNaN(clip.duration) && clip.duration > 0) {
+                clipDurations[clipId] = clip.duration
+              }
+            }
             if (--remaining === 0) afterProbe()
           })
         } catch {
           clipHasAudio[clipId] = false
+          // Fallback to clip.duration on error
+          if (clip.duration && !isNaN(clip.duration) && clip.duration > 0) {
+            clipDurations[clipId] = clip.duration
+          }
           if (--remaining === 0) afterProbe()
         }
       }

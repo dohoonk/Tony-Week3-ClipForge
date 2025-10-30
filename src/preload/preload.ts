@@ -29,6 +29,22 @@ contextBridge.exposeInMainWorld('clipforge', {
     ipcRenderer.invoke('saveRecording', uint8Array, outputPath),
   getScreenSources: () => ipcRenderer.invoke('getScreenSources'),
   
+  // AI transcription operations
+  transcribeClipByPath: (clipPath: string, clipHash?: string) => 
+    ipcRenderer.invoke('transcribeClipByPath', clipPath, clipHash),
+  detectFillers: (clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => 
+    ipcRenderer.invoke('detectFillers', clipPath, clipId, clipHash, options),
+  
+  // Config/Settings operations
+  loadConfig: () => ipcRenderer.invoke('loadConfig'),
+  saveConfig: (config: any) => ipcRenderer.invoke('saveConfig', config),
+  testOpenAIConnection: (apiKey: string) => ipcRenderer.invoke('testOpenAIConnection', apiKey),
+  
+  // Script Review operations
+  transcribeClipFresh: (clipPath: string) => ipcRenderer.invoke('transcribeClipFresh', clipPath),
+  reviewTranscript: (clipPath: string, context: 'casual' | 'interview' | 'social' | 'business') => 
+    ipcRenderer.invoke('reviewTranscript', clipPath, context),
+  
   // Event listeners
   onRecordingComplete: (callback: (path: string, metadata: any) => void) => {
     ipcRenderer.on('recording:completed', (_event, path: string, metadata: any) => 
@@ -50,6 +66,18 @@ contextBridge.exposeInMainWorld('clipforge', {
   
   onExportEnd: (callback: (data: { outputPath: string }) => void) => {
     ipcRenderer.on('export:end', (_event, data: any) => 
+      callback(data)
+    )
+  },
+  
+  onTranscriptionProgress: (callback: (data: { percent: number; message: string }) => void) => {
+    ipcRenderer.on('transcription:progress', (_event, data: any) => 
+      callback(data)
+    )
+  },
+  
+  onTranscriptionError: (callback: (data: { message: string }) => void) => {
+    ipcRenderer.on('transcription:error', (_event, data: any) => 
       callback(data)
     )
   },

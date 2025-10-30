@@ -1,4 +1,4 @@
-# Active Context: ClipForge
+# Active Context: InterviewMate
 
 ## Current Focus
 **Phase**: Project Initialization

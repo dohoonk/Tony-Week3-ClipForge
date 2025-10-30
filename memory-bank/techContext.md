@@ -1,4 +1,4 @@
-# Technical Context: ClipForge
+# Technical Context: InterviewMate
 
 ## Technology Stack
 

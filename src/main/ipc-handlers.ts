@@ -3,6 +3,12 @@ import { ffmpegWrapper } from './ffmpeg-wrapper'
 import { projectIO } from './project-io'
 import { recordingService } from './recording-service'
 import { fileIngestService } from './file-ingest-service'
+import { transcriptCache } from './ai/transcript-cache'
+import { WhisperRunner } from './ai/whisper-runner'
+import { detectFillerSpans } from '../shared/ai/filler-detection'
+import { configService } from './config-service'
+import { openaiService } from './ai/openai-service'
+import type { Config } from '../shared/types'
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
@@ -54,18 +60,18 @@ export function setupIpcHandlers() {
     }
 
     // Ingest files: copy to ~/.clipforge/clips/ with UUID filenames
-    const ingestedPaths: string[] = []
+    const ingestedFiles: Array<{ path: string; hash: string }> = []
     for (const originalPath of result.filePaths) {
       try {
-        const newPath = fileIngestService.ingestFile(originalPath)
-        ingestedPaths.push(newPath)
+        const ingestResult = fileIngestService.ingestFile(originalPath)
+        ingestedFiles.push({ path: ingestResult.path, hash: ingestResult.hash })
       } catch (error) {
         console.error(`[IPC] Failed to ingest file ${originalPath}:`, error)
         // Continue with other files
       }
     }
 
-    return ingestedPaths
+    return ingestedFiles
   })
 
   // probe - Extract metadata from video file using FFprobe
@@ -334,11 +340,233 @@ export function setupIpcHandlers() {
       const buffer = Buffer.from(fileData)
       
       // Ingest file using file ingest service
-      const savedPath = fileIngestService.ingestFileData(buffer, fileName)
-      console.log(`[IPC] Dropped file saved: ${savedPath}`)
-      return savedPath
+      const ingestResult = fileIngestService.ingestFileData(buffer, fileName)
+      console.log(`[IPC] Dropped file saved: ${ingestResult.path}, hash: ${ingestResult.hash}`)
+      return { path: ingestResult.path, hash: ingestResult.hash }
     } catch (error: any) {
       console.error('[IPC] Save dropped file failed:', error)
+      throw error
+    }
+  })
+
+  // transcribeClip - Transcribe a clip using Whisper (with cache)
+  ipcMain.handle('transcribeClip', async (_event, clipId: string) => {
+    try {
+      // Get clip from current project state
+      // Note: We need to access project state here - this might need refactoring
+      // For now, we'll accept clip path directly or look it up
+      // TODO: Pass clip path or have a way to look up clips by ID
+      throw new Error('transcribeClip: Implementation requires clip lookup - pass clipPath for now')
+    } catch (error: any) {
+      console.error('[IPC] Transcribe clip failed:', error)
+      throw error
+    }
+  })
+
+  // transcribeClipByPath - Transcribe a clip by file path (with cache)
+  ipcMain.handle('transcribeClipByPath', async (_event, clipPath: string, clipHash?: string) => {
+    try {
+      console.log(`[IPC] transcribeClipByPath called for: ${clipPath}, hash: ${clipHash}`)
+
+      // Cache disabled for now - can be re-enabled later for performance
+      // TODO: Re-enable caching when ready
+      // if (clipHash) {
+      //   const cached = await transcriptCache.getCachedTranscript(clipHash)
+      //   if (cached) {
+      //     console.log(`[IPC] Using cached transcript for hash: ${clipHash}`)
+      //     BrowserWindow.getAllWindows().forEach(win => {
+      //       win.webContents.send('transcription:progress', { percent: 100, message: 'Using cached transcript' })
+      //     })
+      //     return cached
+      //   }
+      // }
+
+      // Always transcribe fresh (cache disabled)
+      console.log(`[IPC] Transcribing with Whisper...`)
+      
+      const runner = new WhisperRunner()
+      
+      // Forward progress events to renderer
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      // Cache disabled - uncomment to re-enable
+      // if (clipHash) {
+      //   try {
+      //     await transcriptCache.setCachedTranscript(clipHash, transcript)
+      //   } catch (cacheError) {
+      //     console.warn('[IPC] Failed to cache transcript:', cacheError)
+      //   }
+      // }
+
+      console.log(`[IPC] Transcription complete: ${transcript.words.length} words`)
+      return transcript
+    } catch (error: any) {
+      console.error('[IPC] Transcribe clip failed:', error)
+      
+      // Emit error event
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:error', { message: error.message })
+      })
+      
+      throw error
+    }
+  })
+
+  // transcribeClipFresh - Always transcribe fresh (no cache, for script review)
+  ipcMain.handle('transcribeClipFresh', async (_event, clipPath: string) => {
+    try {
+      console.log(`[IPC] transcribeClipFresh called for: ${clipPath}`)
+
+      const runner = new WhisperRunner()
+      
+      // Forward progress events to renderer
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      console.log(`[IPC] Fresh transcription complete: ${transcript.words.length} words`)
+      return transcript
+    } catch (error: any) {
+      console.error('[IPC] Fresh transcription failed:', error)
+      
+      // Emit error event
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:error', { message: error.message })
+      })
+      
+      throw error
+    }
+  })
+
+  // detectFillers - Detect filler words in a clip's transcript
+  ipcMain.handle('detectFillers', async (_event, clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => {
+    try {
+      console.log(`[IPC] detectFillers called for clipId: ${clipId}, path: ${clipPath}`)
+
+      // First, get transcript by transcribing (cache is disabled)
+      const runner = new WhisperRunner()
+      
+      // Forward progress events to renderer
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      if (!transcript || transcript.words.length === 0) {
+        throw new Error('Transcript is empty - no words to analyze')
+      }
+
+      // Detect fillers
+      const fillers = detectFillerSpans(transcript, clipId, {
+        confMin: options?.confMin,
+        padMs: 40, // Default padding
+        mergeGapMs: 120, // Default merge gap
+      })
+
+      console.log(`[IPC] Detected ${fillers.length} filler spans for clipId: ${clipId}`)
+      return fillers
+    } catch (error: any) {
+      console.error('[IPC] Detect fillers failed:', error)
+      throw error
+    }
+  })
+
+  // Config/Settings handlers
+  ipcMain.handle('loadConfig', async () => {
+    try {
+      const config = await configService.loadConfig()
+      return config
+    } catch (error: any) {
+      console.error('[IPC] Load config failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('saveConfig', async (_event, config: Config) => {
+    try {
+      await configService.saveConfig(config)
+      return { success: true }
+    } catch (error: any) {
+      console.error('[IPC] Save config failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('testOpenAIConnection', async (_event, apiKey: string) => {
+    try {
+      const result = await configService.testOpenAIKey(apiKey)
+      return result
+    } catch (error: any) {
+      console.error('[IPC] Test OpenAI connection failed:', error)
+      return {
+        success: false,
+        message: `Test failed: ${error.message}`,
+      }
+    }
+  })
+
+  // reviewTranscript - Transcribe clip and get OpenAI script review
+  ipcMain.handle('reviewTranscript', async (_event, clipPath: string, context: 'casual' | 'interview' | 'social' | 'business') => {
+    try {
+      console.log(`[IPC] reviewTranscript called for: ${clipPath}, context: ${context}`)
+
+      // Step 1: Get fresh transcript
+      const runner = new WhisperRunner()
+      
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      if (!transcript || transcript.words.length === 0) {
+        throw new Error('Transcript is empty - no words to review')
+      }
+
+      // Step 2: Convert transcript words to text
+      const transcriptText = transcript.words
+        .map(word => word.text)
+        .join(' ')
+        .trim()
+
+      if (!transcriptText) {
+        throw new Error('Transcript text is empty')
+      }
+
+      console.log(`[IPC] Transcript text length: ${transcriptText.length} characters`)
+
+      // Step 3: Get review from OpenAI
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:progress', { percent: 100, message: 'Analyzing script...' })
+      })
+
+      const review = await openaiService.reviewTranscript(transcriptText, context)
+
+      console.log(`[IPC] Script review complete`)
+      return review
+    } catch (error: any) {
+      console.error('[IPC] Review transcript failed:', error)
+      
+      // Emit error event
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:error', { message: error.message })
+      })
+      
       throw error
     }
   })

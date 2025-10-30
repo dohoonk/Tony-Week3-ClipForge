@@ -1,7 +1,7 @@
 {
-  "name": "week3-clipforge",
+  "name": "interviewmate",
   "version": "1.0.0",
-  "description": "ClipForge - Desktop video editor for quick edits",
+  "description": "InterviewMate - Desktop video editor for interview preparation and editing",
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "concurrently \"npm:dev:vite\" \"npm:dev:electron\"",
@@ -16,6 +16,7 @@
   "keywords": [
     "electron",
     "video-editor",
+    "interview",
     "desktop"
   ],
   "author": "Tony Kim",

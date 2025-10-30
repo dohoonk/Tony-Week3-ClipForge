@@ -23,6 +23,18 @@ npm-debug.log*
 # OS
 Thumbs.db
 
+# Whisper models and binaries (too large for git)
+resources/models/whisper/
+bin/whisper/
+
+# FFmpeg binaries (platform-specific, copy from system before packaging)
+bin/mac/
+
+# User config and data (contains sensitive API keys - NEVER commit!)
+.interviewmate/
+config.json
+*.interviewmate.json
+
 # Sample video
 sample.MP4
 sample copy.MP4

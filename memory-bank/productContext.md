@@ -1,7 +1,7 @@
-# Product Context: ClipForge
+# Product Context: InterviewMate
 
 ## Why This Exists
-Creators need a simple, fast desktop video editor that doesn't require learning complex professional software. ClipForge fills the gap between basic mobile apps and heavy-duty editors like Premiere Pro.
+Job seekers and professionals need a simple, fast desktop video editor for interview preparation and practice. InterviewMate fills the gap between basic mobile apps and heavy-duty editors like Premiere Pro, with AI-powered features specifically designed for interview content.
 
 ## Problems It Solves
 1. **Complexity Barrier**: Professional editors are overwhelming for quick edits

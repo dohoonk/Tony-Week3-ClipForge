@@ -14,7 +14,7 @@ export class RecordingService extends EventEmitter {
   private recordingType: 'screen' | 'webcam' | 'pip' | null = null
   private timeoutId: NodeJS.Timeout | null = null
   private readonly MAX_RECORDING_DURATION = 30 * 60 * 1000 // 30 minutes
-  private readonly RECORDINGS_DIR = join(homedir(), 'Movies', 'ClipForge', 'recordings')
+  private readonly RECORDINGS_DIR = join(homedir(), 'Movies', 'InterviewMate', 'recordings')
   private currentOutputPath: string | null = null
   private recordingStartTime: number | null = null
 

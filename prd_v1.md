@@ -102,6 +102,28 @@ The MVP focuses on **core editing flow**, not advanced effects or collaborative 
   - **Runtime:** flat structure in Zustand (clips: Record, trackItems: Record)
   - **Persistence:** nested structure (tracks[] with items[] array)
   - Conversion handled automatically on save/load
+
+### **4.7 AI Assistant — Filler Word Removal**
+- **Local transcription:** Whisper.cpp (ggml-base.en.bin) for word-level timestamps
+- **Offline-first:** No cloud dependencies, all processing local
+- **Cache system:** Transcripts cached by file hash in `~/.clipforge/cache/transcripts/`
+- **Filler detection:** Detect common filler words ("um", "uh", "like", "you know", "so", "actually", "well")
+- **Preview workflow:**
+  - User selects clip → "Analyze Speech" → Transcribe → Detect fillers
+  - Display detected fillers with timestamps and confidence scores
+  - User can preview each filler (play 1 sec before/after)
+  - Adjustable confidence threshold (0.25–0.60, default 0.35)
+  - Select individual fillers or remove all
+- **Timeline editing:**
+  - Generate cut plan based on selected fillers
+  - Apply cuts automatically (respects existing trim bounds)
+  - Single undo action for all AI edits
+  - Playhead adjustment if inside removed region
+- **Error handling:**
+  - Missing Whisper binary → Disable analyze, show instructions
+  - Transcription failure → Show error with retry option
+  - No fillers detected → Suggest confidence adjustment
+- **Performance:** Transcription runs in background with progress updates, non-blocking UI
 - Example JSON:
   ```json
   {
@@ -150,6 +172,7 @@ type Clip = {
   duration: number;  // seconds
   width: number;
   height: number;
+  hash?: string;  // SHA-1 hash for transcript caching
 };
 
 type TrackItem = {
@@ -174,7 +197,42 @@ type ClipForgeState = {
     playheadSec: number;
     zoom: number;  // multiplier (0.5× - 10×)
     selectedId?: string;  // selected trackItem
+    isPlaying: boolean;
+    snapEnabled: boolean;
+    snapInterval: number;
+    snapToEdges: boolean;
   };
+};
+
+// AI-related types
+type Transcript = {
+  words: Array<{
+    text: string;
+    startSec: number;
+    endSec: number;
+    confidence: number;
+  }>;
+  durationSec: number;
+  audioDurationSec: number;
+  modelVersion: string;
+};
+
+type FillerSpan = {
+  clipId: string;
+  word: string;
+  startSec: number;
+  endSec: number;
+  confidence: number;
+  paddedStart: number;
+  paddedEnd: number;
+};
+
+type CutPlan = {
+  trackItemId: string;
+  cuts: Array<{
+    startSec: number;
+    endSec: number;
+  }>;
 };
 ```
 
@@ -226,6 +284,7 @@ type Project = {
 - Recording format: `.webm` (VP8/Opus) for screen/webcam capture
 - Export format: `.mp4` (H.264 + AAC) for final output
 - Platform: macOS initially (universal binary: Intel + Apple Silicon)
-- Bundle size: ~200 MB (includes FFmpeg binaries)
+- Bundle size: ~750 MB (includes FFmpeg binaries + Whisper.cpp + ggml-base.en.bin model)
 - Battery: Export optimized for <1.3× real-time to conserve power
+- AI processing: Local Whisper.cpp for offline transcription (no network required)
 
