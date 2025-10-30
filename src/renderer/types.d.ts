@@ -1,4 +1,4 @@
-import { Project, Transcript, FillerSpan } from '@shared/types'
+import { Project, Transcript, FillerSpan, Config, ScriptReview } from '@shared/types'
 
 interface Window {
   clipforge: {
@@ -26,6 +26,15 @@ interface Window {
     // AI transcription operations
     transcribeClipByPath: (clipPath: string, clipHash?: string) => Promise<Transcript>
     detectFillers: (clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => Promise<FillerSpan[]>
+    
+    // Config/Settings operations
+    loadConfig: () => Promise<Config | null>
+    saveConfig: (config: Config) => Promise<{ success: boolean }>
+    testOpenAIConnection: (apiKey: string) => Promise<{ success: boolean; message: string }>
+    
+    // Script Review operations
+    transcribeClipFresh: (clipPath: string) => Promise<Transcript>
+    reviewTranscript: (clipPath: string, context: 'casual' | 'interview' | 'social' | 'business') => Promise<ScriptReview>
     
     // Event listeners
     onRecordingComplete: (callback: (path: string, metadata: any) => void) => void

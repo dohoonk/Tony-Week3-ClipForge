@@ -6,6 +6,9 @@ import { fileIngestService } from './file-ingest-service'
 import { transcriptCache } from './ai/transcript-cache'
 import { WhisperRunner } from './ai/whisper-runner'
 import { detectFillerSpans } from '../shared/ai/filler-detection'
+import { configService } from './config-service'
+import { openaiService } from './ai/openai-service'
+import type { Config } from '../shared/types'
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
@@ -415,6 +418,36 @@ export function setupIpcHandlers() {
     }
   })
 
+  // transcribeClipFresh - Always transcribe fresh (no cache, for script review)
+  ipcMain.handle('transcribeClipFresh', async (_event, clipPath: string) => {
+    try {
+      console.log(`[IPC] transcribeClipFresh called for: ${clipPath}`)
+
+      const runner = new WhisperRunner()
+      
+      // Forward progress events to renderer
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      console.log(`[IPC] Fresh transcription complete: ${transcript.words.length} words`)
+      return transcript
+    } catch (error: any) {
+      console.error('[IPC] Fresh transcription failed:', error)
+      
+      // Emit error event
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:error', { message: error.message })
+      })
+      
+      throw error
+    }
+  })
+
   // detectFillers - Detect filler words in a clip's transcript
   ipcMain.handle('detectFillers', async (_event, clipPath: string, clipId: string, clipHash?: string, options?: { confMin?: number }) => {
     try {
@@ -447,6 +480,93 @@ export function setupIpcHandlers() {
       return fillers
     } catch (error: any) {
       console.error('[IPC] Detect fillers failed:', error)
+      throw error
+    }
+  })
+
+  // Config/Settings handlers
+  ipcMain.handle('loadConfig', async () => {
+    try {
+      const config = await configService.loadConfig()
+      return config
+    } catch (error: any) {
+      console.error('[IPC] Load config failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('saveConfig', async (_event, config: Config) => {
+    try {
+      await configService.saveConfig(config)
+      return { success: true }
+    } catch (error: any) {
+      console.error('[IPC] Save config failed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('testOpenAIConnection', async (_event, apiKey: string) => {
+    try {
+      const result = await configService.testOpenAIKey(apiKey)
+      return result
+    } catch (error: any) {
+      console.error('[IPC] Test OpenAI connection failed:', error)
+      return {
+        success: false,
+        message: `Test failed: ${error.message}`,
+      }
+    }
+  })
+
+  // reviewTranscript - Transcribe clip and get OpenAI script review
+  ipcMain.handle('reviewTranscript', async (_event, clipPath: string, context: 'casual' | 'interview' | 'social' | 'business') => {
+    try {
+      console.log(`[IPC] reviewTranscript called for: ${clipPath}, context: ${context}`)
+
+      // Step 1: Get fresh transcript
+      const runner = new WhisperRunner()
+      
+      runner.on('progress', (data: { percent: number; message: string }) => {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('transcription:progress', data)
+        })
+      })
+
+      const transcript = await runner.transcribe(clipPath)
+
+      if (!transcript || transcript.words.length === 0) {
+        throw new Error('Transcript is empty - no words to review')
+      }
+
+      // Step 2: Convert transcript words to text
+      const transcriptText = transcript.words
+        .map(word => word.text)
+        .join(' ')
+        .trim()
+
+      if (!transcriptText) {
+        throw new Error('Transcript text is empty')
+      }
+
+      console.log(`[IPC] Transcript text length: ${transcriptText.length} characters`)
+
+      // Step 3: Get review from OpenAI
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:progress', { percent: 100, message: 'Analyzing script...' })
+      })
+
+      const review = await openaiService.reviewTranscript(transcriptText, context)
+
+      console.log(`[IPC] Script review complete`)
+      return review
+    } catch (error: any) {
+      console.error('[IPC] Review transcript failed:', error)
+      
+      // Emit error event
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('transcription:error', { message: error.message })
+      })
+      
       throw error
     }
   })

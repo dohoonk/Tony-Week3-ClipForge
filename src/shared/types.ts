@@ -92,3 +92,19 @@ export type CutPlan = {
   }>
 }
 
+// Config types for settings
+export type Config = {
+  openaiApiKey?: string
+}
+
+export type ScriptReview = {
+  summary: string
+  clarityNotes: string[]
+  pacingNotes: string[]
+  fillerNotes: string[]
+  suggestions: Array<{
+    original: string
+    improved: string
+  }>
+}
+

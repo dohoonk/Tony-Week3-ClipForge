@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { useStore } from '../store'
 import { applyCutPlanToStore } from '../ai/apply-cut-plan'
 import { generateCutPlan } from '../../shared/ai/generate-cut-plan'
-import type { FillerSpan, CutPlan } from '../../shared/types'
+import type { FillerSpan, CutPlan, ScriptReview } from '../../shared/types'
+import { ScriptReviewTab } from './ScriptReviewTab'
 
 export function AIAssistantPanel() {
   const { trackItems, clips, undoLastAICuts, lastAITrackItemsSnapshot } = useStore()
+  const [activeTab, setActiveTab] = useState<'fillers' | 'review'>('fillers')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [fillers, setFillers] = useState<FillerSpan[]>([])
   const [cutPlan, setCutPlan] = useState<CutPlan[]>([])
@@ -148,9 +150,36 @@ export function AIAssistantPanel() {
     <aside className="panel w-64 h-full" style={{ minWidth: '200px', flexShrink: 0 }}>
       <h2 className="text-lg font-semibold mb-4 text-white">🤖 AI Assistant</h2>
 
+      {/* Tabs */}
+      <div className="flex border-b border-gray-700 mb-4">
+        <button
+          onClick={() => setActiveTab('fillers')}
+          className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
+            activeTab === 'fillers'
+              ? 'text-blue-400 border-b-2 border-blue-500'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          🔍 Fillers
+        </button>
+        <button
+          onClick={() => setActiveTab('review')}
+          className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
+            activeTab === 'review'
+              ? 'text-blue-400 border-b-2 border-blue-500'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          📝 Script Review
+        </button>
+      </div>
+
       <div className="space-y-4">
-        {/* Confidence Threshold */}
-        <div>
+        {/* Fillers Tab Content */}
+        {activeTab === 'fillers' && (
+          <>
+            {/* Confidence Threshold */}
+            <div>
           <label className="text-xs text-gray-400 block mb-2">
             Confidence Threshold: {confidenceThreshold.toFixed(2)}
           </label>
@@ -255,6 +284,11 @@ export function AIAssistantPanel() {
             Add clips to the timeline to analyze speech
           </div>
         )}
+          </>
+        )}
+
+        {/* Script Review Tab Content */}
+        {activeTab === 'review' && <ScriptReviewTab />}
       </div>
     </aside>
   )

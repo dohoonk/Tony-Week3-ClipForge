@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useStore } from '../store'
-import type { Transcript, FillerSpan } from '@shared/types'
+import type { Transcript, FillerSpan, ScriptReview } from '@shared/types'
 
 export function TranscriptionTestPanel() {
   const { clips } = useStore()
@@ -11,6 +11,9 @@ export function TranscriptionTestPanel() {
   const [transcript, setTranscript] = useState<Transcript | null>(null)
   const [fillers, setFillers] = useState<FillerSpan[]>([])
   const [isDetectingFillers, setIsDetectingFillers] = useState(false)
+  const [review, setReview] = useState<ScriptReview | null>(null)
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [reviewContext, setReviewContext] = useState<'casual' | 'interview' | 'social' | 'business'>('casual')
   const [error, setError] = useState<string | null>(null)
   const [output, setOutput] = useState<string>('')
 
@@ -136,6 +139,59 @@ export function TranscriptionTestPanel() {
     }
   }
 
+  const handleReviewScript = async () => {
+    if (!selectedClipId) {
+      setError('Please select a clip first')
+      return
+    }
+
+    const clip = clips[selectedClipId]
+    if (!clip) {
+      setError('Clip not found')
+      return
+    }
+
+    setIsReviewing(true)
+    setError(null)
+    setReview(null)
+    appendOutput(`\n📝 Starting script review for: ${clip.name}`)
+    appendOutput(`Context: ${reviewContext}`)
+
+    try {
+      const reviewResult = await window.clipforge.reviewTranscript(clip.path, reviewContext)
+      setReview(reviewResult)
+      appendOutput(`\n✅ Script review complete!`)
+      appendOutput(`\n--- Summary ---`)
+      appendOutput(reviewResult.summary)
+      appendOutput(`\n--- Clarity Notes (${reviewResult.clarityNotes.length}) ---`)
+      reviewResult.clarityNotes.forEach((note, i) => {
+        appendOutput(`${i + 1}. ${note}`)
+      })
+      appendOutput(`\n--- Pacing Notes (${reviewResult.pacingNotes.length}) ---`)
+      reviewResult.pacingNotes.forEach((note, i) => {
+        appendOutput(`${i + 1}. ${note}`)
+      })
+      appendOutput(`\n--- Filler Notes (${reviewResult.fillerNotes.length}) ---`)
+      reviewResult.fillerNotes.forEach((note, i) => {
+        appendOutput(`${i + 1}. ${note}`)
+      })
+      appendOutput(`\n--- Suggestions (${reviewResult.suggestions.length}) ---`)
+      reviewResult.suggestions.slice(0, 5).forEach((suggestion, i) => {
+        appendOutput(`${i + 1}. Original: "${suggestion.original}"`)
+        appendOutput(`   Improved: "${suggestion.improved}"`)
+      })
+      if (reviewResult.suggestions.length > 5) {
+        appendOutput(`... and ${reviewResult.suggestions.length - 5} more suggestions`)
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || String(err)
+      setError(errorMsg)
+      appendOutput(`\n❌ Script review failed: ${errorMsg}`)
+    } finally {
+      setIsReviewing(false)
+    }
+  }
+
   const clipList = Object.values(clips)
   const selectedClip = selectedClipId ? clips[selectedClipId] : null
 
@@ -170,7 +226,7 @@ export function TranscriptionTestPanel() {
         {/* Transcribe Button */}
         <button
           onClick={handleTranscribe}
-          disabled={!selectedClipId || isTranscribing || isDetectingFillers}
+          disabled={!selectedClipId || isTranscribing || isDetectingFillers || isReviewing}
           className="btn btn-primary w-full"
         >
           {isTranscribing ? '🔄 Transcribing...' : '🎤 Transcribe Clip'}
@@ -179,14 +235,38 @@ export function TranscriptionTestPanel() {
         {/* Detect Fillers Button */}
         <button
           onClick={handleDetectFillers}
-          disabled={!selectedClipId || isDetectingFillers || isTranscribing}
+          disabled={!selectedClipId || isDetectingFillers || isTranscribing || isReviewing}
           className="btn btn-warning w-full"
         >
           {isDetectingFillers ? '🔍 Detecting Fillers...' : '🔍 Detect Fillers'}
         </button>
 
+        {/* Script Review Section */}
+        <div className="border-t border-gray-700 pt-4 mt-4">
+          <label className="text-xs text-gray-400 block mb-2">Review Context</label>
+          <select
+            value={reviewContext}
+            onChange={(e) => setReviewContext(e.target.value as typeof reviewContext)}
+            disabled={isReviewing || isTranscribing || isDetectingFillers}
+            className="w-full select mb-3"
+          >
+            <option value="casual">Casual</option>
+            <option value="interview">Interview</option>
+            <option value="social">Social Media</option>
+            <option value="business">Business</option>
+          </select>
+
+          <button
+            onClick={handleReviewScript}
+            disabled={!selectedClipId || isReviewing || isTranscribing || isDetectingFillers}
+            className="btn btn-primary w-full"
+          >
+            {isReviewing ? '📝 Reviewing...' : '📝 Review Script'}
+          </button>
+        </div>
+
         {/* Progress Display */}
-        {(isTranscribing || isDetectingFillers) && (
+        {(isTranscribing || isDetectingFillers || isReviewing) && (
           <div className="space-y-2">
             <p className="text-xs text-gray-300">{progressMessage || 'Processing...'}</p>
             <div className="progress-container">

@@ -5,10 +5,12 @@ import { Player } from './components/Player'
 import { ExportPanel } from './components/ExportPanel'
 import { TranscriptionTestPanel } from './components/TranscriptionTestPanel'
 import { AIAssistantPanel } from './components/AIAssistantPanel'
+import { SettingsDialog } from './components/SettingsDialog'
 
 function App() {
   const [timelineHeight, setTimelineHeight] = useState(33) // Percentage of available height
   const [isResizing, setIsResizing] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -49,8 +51,16 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
-      <header className="p-4 border-b border-gray-700 bg-gray-800">
+      <header className="p-4 border-b border-gray-700 bg-gray-800 flex justify-between items-center">
         <h1 className="text-2xl font-bold text-white">ClipForge</h1>
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="p-2 text-gray-400 hover:text-white transition-colors"
+          title="Settings"
+          aria-label="Open Settings"
+        >
+          ⚙️
+        </button>
       </header>
       <main className="flex flex-1 overflow-hidden px-4" style={{ minHeight: 0 }}>
         <MediaLibrary />
@@ -99,6 +109,10 @@ function App() {
         <AIAssistantPanel />
         <TranscriptionTestPanel />
       </main>
+      <SettingsDialog 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
     </div>
   )
 }

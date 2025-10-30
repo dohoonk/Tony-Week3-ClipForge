@@ -27,6 +27,11 @@ Thumbs.db
 resources/models/whisper/
 bin/whisper/
 
+# User config and data (contains sensitive API keys - NEVER commit!)
+.clipforge/
+config.json
+*.clipforge.json
+
 # Sample video
 sample.MP4
 sample copy.MP4
