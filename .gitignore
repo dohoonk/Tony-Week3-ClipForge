@@ -23,6 +23,10 @@ npm-debug.log*
 # OS
 Thumbs.db
 
+# Whisper models and binaries (too large for git)
+resources/models/whisper/
+bin/whisper/
+
 # Sample video
 sample.MP4
 sample copy.MP4
