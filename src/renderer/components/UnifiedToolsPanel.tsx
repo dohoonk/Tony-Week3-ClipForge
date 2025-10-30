@@ -56,10 +56,10 @@ export function UnifiedToolsPanel({ style }: { style?: React.CSSProperties }) {
               ? 'text-blue-400 border-b-2 border-blue-500'
               : 'text-gray-400 hover:text-gray-300'
           }`}
-          title="Testing"
+          title="Transcription"
         >
           <span className="mb-1">🧪</span>
-          <span>Test</span>
+          <span>Transcript</span>
         </button>
       </div>
 

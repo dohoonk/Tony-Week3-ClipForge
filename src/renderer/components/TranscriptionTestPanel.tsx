@@ -202,6 +202,25 @@ export function TranscriptionTestPanel() {
           </div>
         )}
 
+        {/* Full Transcript Display */}
+        {transcript && (
+          <div className="p-3 bg-gray-800 border border-gray-700 rounded text-xs">
+            <div className="text-blue-300 font-semibold mb-2">📄 Full Transcript</div>
+            <div className="text-gray-200 max-h-[600px] overflow-y-auto">
+              <div className="space-y-1">
+                {transcript.words.map((word, i) => (
+                  <span key={i} className="mr-1">
+                    {word.text}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-400">
+              {transcript.words.length} words • {transcript.durationSec.toFixed(1)}s duration
+            </div>
+          </div>
+        )}
+
         {/* Empty State */}
         {!transcript && !fillers.length && !isTranscribing && !isDetectingFillers && !error && (
           <div className="text-xs text-gray-500 text-center p-4 border-t border-gray-700 pt-4">
@@ -315,9 +334,9 @@ export function TranscriptionTestPanelContent() {
   const clipList = Object.values(clips)
   const selectedClip = selectedClipId ? clips[selectedClipId] : null
 
-  return (
-    <>
-      <h2 className="text-lg font-semibold mb-4 text-white">🎤 Transcription Test</h2>
+         return (
+           <>
+             <h2 className="text-lg font-semibold mb-4 text-white">🎤 Transcription</h2>
       
       <div className="space-y-4">
         <div className="space-y-2">
@@ -408,6 +427,25 @@ export function TranscriptionTestPanelContent() {
                   <div className="text-yellow-400 italic mt-1">... and {fillers.length - 5} more</div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Transcript Display */}
+        {transcript && (
+          <div className="p-3 bg-gray-800 border border-gray-700 rounded text-xs">
+            <div className="text-blue-300 font-semibold mb-2">📄 Full Transcript</div>
+            <div className="text-gray-200 max-h-[600px] overflow-y-auto">
+              <div className="space-y-1">
+                {transcript.words.map((word, i) => (
+                  <span key={i} className="mr-1">
+                    {word.text}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-400">
+              {transcript.words.length} words • {transcript.durationSec.toFixed(1)}s duration
             </div>
           </div>
         )}
