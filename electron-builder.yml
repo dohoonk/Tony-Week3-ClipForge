@@ -19,10 +19,18 @@ files:
   - "dist"
   - "package.json"
 
-# Include FFmpeg binaries as extra resources
+# Include FFmpeg binaries and Whisper as extra resources
 extraResources:
   - from: "bin/mac"
     to: "bin"
+    filter:
+      - "**/*"
+  - from: "bin/whisper/darwin"
+    to: "bin/whisper/darwin"
+    filter:
+      - "**/*"
+  - from: "resources/models/whisper"
+    to: "resources/models/whisper"
     filter:
       - "**/*"
 

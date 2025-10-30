@@ -27,6 +27,9 @@ Thumbs.db
 resources/models/whisper/
 bin/whisper/
 
+# FFmpeg binaries (platform-specific, copy from system before packaging)
+bin/mac/
+
 # User config and data (contains sensitive API keys - NEVER commit!)
 .clipforge/
 config.json

@@ -2,17 +2,19 @@ import React, { useState, useRef, useEffect } from 'react'
 import { MediaLibrary } from './components/MediaLibrary'
 import { Timeline } from './components/Timeline'
 import { Player } from './components/Player'
-import { ExportPanel } from './components/ExportPanel'
-import { TranscriptionTestPanel } from './components/TranscriptionTestPanel'
-import { AIAssistantPanel } from './components/AIAssistantPanel'
+import { UnifiedToolsPanel } from './components/UnifiedToolsPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 
 function App() {
   const [timelineHeight, setTimelineHeight] = useState(33) // Percentage of available height
+  const [panelWidth, setPanelWidth] = useState(300) // Fixed width in pixels for tools panel (default 300px)
   const [isResizing, setIsResizing] = useState(false)
+  const [isResizingPanel, setIsResizingPanel] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const mainContainerRef = useRef<HTMLDivElement>(null)
 
+  // Vertical resizing (between player and timeline)
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing || !containerRef.current) return
@@ -47,6 +49,43 @@ function App() {
     }
   }, [isResizing])
 
+  // Horizontal resizing (between main content and tools panel)
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingPanel || !mainContainerRef.current) return
+      
+      const container = mainContainerRef.current
+      const rect = container.getBoundingClientRect()
+      const totalWidth = rect.width
+      const mouseX = e.clientX - rect.left
+      
+      // Calculate panel width from right edge
+      const newPanelWidth = totalWidth - mouseX
+      
+      // Constrain panel width between 200px and 600px
+      const constrainedWidth = Math.max(200, Math.min(600, newPanelWidth))
+      setPanelWidth(constrainedWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizingPanel(false)
+    }
+
+    if (isResizingPanel) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'ew-resize'
+      document.body.style.userSelect = 'none'
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [isResizingPanel])
+
   const playerHeight = 100 - timelineHeight
 
   return (
@@ -62,12 +101,18 @@ function App() {
           ⚙️
         </button>
       </header>
-      <main className="flex flex-1 overflow-hidden px-4" style={{ minHeight: 0 }}>
+      <main 
+        ref={mainContainerRef}
+        className="flex flex-1 overflow-hidden px-4" 
+        style={{ minHeight: 0 }}
+      >
         <MediaLibrary />
         <div 
           ref={containerRef}
           className="flex-1 flex flex-col relative" 
-          style={{ minWidth: 0 }}
+          style={{ 
+            minWidth: 0
+          }}
         >
           <div 
             style={{ 
@@ -79,7 +124,7 @@ function App() {
             <Player />
           </div>
           
-          {/* Resizable divider */}
+          {/* Vertical Resizable divider (Player/Timeline) */}
           <div
             className="relative cursor-ns-resize bg-gray-700 hover:bg-gray-600 transition-colors z-10 flex-shrink-0"
             style={{ height: '4px' }}
@@ -105,9 +150,23 @@ function App() {
             <Timeline />
           </div>
         </div>
-        <ExportPanel />
-        <AIAssistantPanel />
-        <TranscriptionTestPanel />
+
+        {/* Horizontal Resizable divider (Main Content/Tools Panel) */}
+        <div
+          className="relative cursor-ew-resize bg-gray-700 hover:bg-gray-600 transition-colors z-10 flex-shrink-0"
+          style={{ width: '4px' }}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setIsResizingPanel(true)
+          }}
+          title="Drag to resize tools panel"
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-12 w-0.5 bg-gray-500 rounded" />
+          </div>
+        </div>
+
+        <UnifiedToolsPanel style={{ width: `${panelWidth}px`, flexShrink: 0 }} />
       </main>
       <SettingsDialog 
         isOpen={isSettingsOpen} 

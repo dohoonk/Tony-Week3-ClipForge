@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import type { ScriptReview } from '../../shared/types'
 import { estimateReviewCost } from '../../shared/ai/cost-estimator'
 
-export function ScriptReviewTab() {
+export function ScriptReviewTab({ showPanelWrapper = true }: { showPanelWrapper?: boolean }) {
   const { clips, trackItems } = useStore()
   const [selectedClipId, setSelectedClipId] = useState<string>('')
   const [selectedContext, setSelectedContext] = useState<'casual' | 'interview' | 'social' | 'business'>('casual')

@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto'
 import { resolveWhisperBinary, resolveWhisperModel } from './resolve-whisper-path'
 import type { Transcript } from '../../shared/types'
 import ffmpeg from 'fluent-ffmpeg'
+import { app } from 'electron'
 
 /**
  * Whisper Runner
@@ -17,6 +18,47 @@ import ffmpeg from 'fluent-ffmpeg'
 export class WhisperRunner extends EventEmitter {
   private process: ChildProcess | null = null
   private modelName: string = 'ggml-base.en.bin'
+
+  constructor() {
+    super()
+    this.configureFFmpeg()
+  }
+
+  /**
+   * Configure FFmpeg paths for the packaged app
+   */
+  private configureFFmpeg(): void {
+    const isPackaged = app.isPackaged
+    const platform = process.platform
+    
+    if (platform === 'darwin') {
+      // Try multiple locations for FFmpeg binaries
+      const possiblePaths = [
+        // Bundled binaries (production)
+        ...(isPackaged 
+          ? [join(process.resourcesPath, 'bin', 'ffmpeg')]
+          : []
+        ),
+        // Development binaries
+        join(process.cwd(), 'bin', 'mac', 'ffmpeg'),
+        // System binaries (fallback)
+        'ffmpeg',
+      ]
+
+      for (const testPath of possiblePaths) {
+        try {
+          if (existsSync(testPath) || !testPath.includes('/')) {
+            ffmpeg.setFfmpegPath(testPath)
+            ffmpeg.setFfprobePath(testPath.replace('ffmpeg', 'ffprobe'))
+            console.log(`[Whisper] Using FFmpeg at: ${testPath}`)
+            break
+          }
+        } catch (error) {
+          continue
+        }
+      }
+    }
+  }
 
   /**
    * Extract audio from video file for Whisper (16kHz mono WAV)

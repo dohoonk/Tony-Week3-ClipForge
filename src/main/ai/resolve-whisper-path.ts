@@ -80,9 +80,9 @@ export function resolveWhisperModel(modelName: string): string | null {
   const possiblePaths: string[] = []
   
   if (isPackaged) {
-    // Production: bundled resources
+    // Production: bundled resources (electron-builder copies to resources/models/whisper)
     possiblePaths.push(
-      join(process.resourcesPath, 'models', 'whisper', modelName)
+      join(process.resourcesPath, 'resources', 'models', 'whisper', modelName)
     )
   } else {
     // Development: local resources
